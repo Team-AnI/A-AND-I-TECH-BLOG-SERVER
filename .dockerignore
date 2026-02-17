@@ -1,0 +1,14 @@
+.git
+.github
+.gradle
+.idea
+.kotlin
+build
+out
+*.iml
+*.log
+README.md
+PLAN.md
+PRD.md
+TASK.md
+HELP.md

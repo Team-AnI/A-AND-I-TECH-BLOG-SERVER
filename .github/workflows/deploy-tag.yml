@@ -1,0 +1,134 @@
+name: Deploy Tagged Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      APP_DIR: ${{ vars.APP_DIR || '/opt/tech-blog' }}
+      POSTGRES_DB: ${{ vars.POSTGRES_DB || 'tech_blog' }}
+      POSTGRES_USER: ${{ vars.POSTGRES_USER || 'tech_blog' }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate tag format
+        run: |
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid tag: ${GITHUB_REF_NAME}"
+            echo "Expected format: vX.Y.Z"
+            exit 1
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: github-actions-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        env:
+          IMAGE_URI: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.ref_name }}
+        run: |
+          docker build -t "${IMAGE_URI}" .
+          docker push "${IMAGE_URI}"
+
+      - name: Deploy on instance via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          AWS_REGION: ${{ env.AWS_REGION }}
+          IMAGE_URI: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.ref_name }}
+          APP_DIR: ${{ env.APP_DIR }}
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ${{ secrets.AWS_USER }}
+          key: ${{ secrets.AWS_SSH_KEY }}
+          port: ${{ vars.AWS_PORT || '22' }}
+          envs: AWS_REGION,IMAGE_URI,APP_DIR,POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD
+          script: |
+            set -euo pipefail
+
+            ECR_REGISTRY="$(echo "${IMAGE_URI}" | cut -d'/' -f1)"
+
+            aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+
+            mkdir -p "${APP_DIR}"
+            # Keep EOF single-quoted so ${...} remains for docker compose env interpolation time.
+            cat <<'EOF' > "${APP_DIR}/docker-compose.yml"
+            services:
+              postgres:
+                image: postgres:16-alpine
+                container_name: tech-blog-postgres
+                restart: always
+                environment:
+                  POSTGRES_DB: ${POSTGRES_DB}
+                  POSTGRES_USER: ${POSTGRES_USER}
+                  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+                volumes:
+                  - postgres_data:/var/lib/postgresql/data
+                healthcheck:
+                  test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+                  interval: 10s
+                  timeout: 5s
+                  retries: 5
+
+              tech-blog:
+                image: ${IMAGE_URI}
+                container_name: tech-blog
+                restart: always
+                depends_on:
+                  postgres:
+                    condition: service_healthy
+                ports:
+                  - "8080:8080"
+                environment:
+                  SPRING_PROFILES_ACTIVE: prod
+                  SPRING_R2DBC_URL: r2dbc:postgresql://postgres:5432/${POSTGRES_DB}
+                  SPRING_R2DBC_USERNAME: ${POSTGRES_USER}
+                  SPRING_R2DBC_PASSWORD: ${POSTGRES_PASSWORD}
+                  SPRING_FLYWAY_ENABLED: "true"
+                  SPRING_FLYWAY_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+                  SPRING_FLYWAY_USER: ${POSTGRES_USER}
+                  SPRING_FLYWAY_PASSWORD: ${POSTGRES_PASSWORD}
+
+            volumes:
+              postgres_data:
+            EOF
+
+            cd "${APP_DIR}"
+            IMAGE_URI="${IMAGE_URI}" \
+            POSTGRES_DB="${POSTGRES_DB}" \
+            POSTGRES_USER="${POSTGRES_USER}" \
+            POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
+            docker compose pull
+
+            IMAGE_URI="${IMAGE_URI}" \
+            POSTGRES_DB="${POSTGRES_DB}" \
+            POSTGRES_USER="${POSTGRES_USER}" \
+            POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
+            docker compose up -d --remove-orphans
+
+            docker image prune -f --filter "until=72h"

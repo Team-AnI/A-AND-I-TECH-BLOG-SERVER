@@ -41,6 +41,7 @@ out/
 
 # Local agent/session artifacts
 .omc/
+.env
 
 # Markdown docs managed outside git
 *.md
