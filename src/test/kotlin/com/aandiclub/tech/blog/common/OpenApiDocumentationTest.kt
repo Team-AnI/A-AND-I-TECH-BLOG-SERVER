@@ -32,8 +32,8 @@ class OpenApiDocumentationTest(
 			?.toString(Charsets.UTF_8)
 			.orEmpty()
 
-		result.shouldContain("/api/v1/posts")
-		result.shouldContain("/api/v1/posts/{postId}")
-		result.shouldContain("/api/v1/images")
+		result.shouldContain("/v1/posts")
+		result.shouldContain("/v1/posts/{postId}")
+		result.shouldContain("/v1/posts/images")
 	}
 })

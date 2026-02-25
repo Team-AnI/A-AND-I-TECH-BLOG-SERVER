@@ -22,6 +22,15 @@ jobs:
       POSTGRES_DB: ${{ vars.POSTGRES_DB || 'tech_blog' }}
       POSTGRES_USER: ${{ vars.POSTGRES_USER || 'tech_blog' }}
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      APP_S3_BUCKET: ${{ secrets.APP_S3_BUCKET }}
+      APP_S3_REGION: ${{ secrets.APP_S3_REGION }}
+      APP_S3_PUBLIC_BASE_URL: ${{ secrets.APP_S3_PUBLIC_BASE_URL }}
+      APP_USER_EVENTS_ENABLED: ${{ vars.APP_USER_EVENTS_ENABLED || 'false' }}
+      APP_USER_EVENTS_QUEUE_URL: ${{ secrets.APP_USER_EVENTS_QUEUE_URL }}
+      APP_USER_EVENTS_REGION: ${{ vars.APP_USER_EVENTS_REGION || vars.AWS_REGION || 'us-east-1' }}
+      APP_USER_EVENTS_WAIT_TIME_SECONDS: ${{ vars.APP_USER_EVENTS_WAIT_TIME_SECONDS || '20' }}
+      APP_USER_EVENTS_MAX_MESSAGES: ${{ vars.APP_USER_EVENTS_MAX_MESSAGES || '10' }}
+      APP_USER_EVENTS_POLL_DELAY_MS: ${{ vars.APP_USER_EVENTS_POLL_DELAY_MS || '1000' }}
 
     steps:
       - name: Checkout
@@ -62,14 +71,28 @@ jobs:
           POSTGRES_DB: ${{ env.POSTGRES_DB }}
           POSTGRES_USER: ${{ env.POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          APP_S3_BUCKET: ${{ env.APP_S3_BUCKET }}
+          APP_S3_REGION: ${{ env.APP_S3_REGION }}
+          APP_S3_PUBLIC_BASE_URL: ${{ env.APP_S3_PUBLIC_BASE_URL }}
+          APP_USER_EVENTS_ENABLED: ${{ env.APP_USER_EVENTS_ENABLED }}
+          APP_USER_EVENTS_QUEUE_URL: ${{ env.APP_USER_EVENTS_QUEUE_URL }}
+          APP_USER_EVENTS_REGION: ${{ env.APP_USER_EVENTS_REGION }}
+          APP_USER_EVENTS_WAIT_TIME_SECONDS: ${{ env.APP_USER_EVENTS_WAIT_TIME_SECONDS }}
+          APP_USER_EVENTS_MAX_MESSAGES: ${{ env.APP_USER_EVENTS_MAX_MESSAGES }}
+          APP_USER_EVENTS_POLL_DELAY_MS: ${{ env.APP_USER_EVENTS_POLL_DELAY_MS }}
         with:
           host: ${{ secrets.AWS_HOST }}
           username: ${{ secrets.AWS_USER }}
           key: ${{ secrets.AWS_SSH_KEY }}
           port: ${{ vars.AWS_PORT || '22' }}
-          envs: AWS_REGION,IMAGE_URI,APP_DIR,POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD
+          envs: AWS_REGION,IMAGE_URI,APP_DIR,POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD,APP_S3_BUCKET,APP_S3_REGION,APP_S3_PUBLIC_BASE_URL,APP_USER_EVENTS_ENABLED,APP_USER_EVENTS_QUEUE_URL,APP_USER_EVENTS_REGION,APP_USER_EVENTS_WAIT_TIME_SECONDS,APP_USER_EVENTS_MAX_MESSAGES,APP_USER_EVENTS_POLL_DELAY_MS
           script: |
             set -euo pipefail
+            : "${APP_S3_BUCKET:?APP_S3_BUCKET is required}"
+            : "${APP_S3_REGION:?APP_S3_REGION is required}"
+            if [[ "${APP_USER_EVENTS_ENABLED}" == "true" ]]; then
+              : "${APP_USER_EVENTS_QUEUE_URL:?APP_USER_EVENTS_QUEUE_URL is required when APP_USER_EVENTS_ENABLED=true}"
+            fi
 
             ECR_REGISTRY="$(echo "${IMAGE_URI}" | cut -d'/' -f1)"
 
@@ -113,22 +136,68 @@ jobs:
                   SPRING_FLYWAY_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
                   SPRING_FLYWAY_USER: ${POSTGRES_USER}
                   SPRING_FLYWAY_PASSWORD: ${POSTGRES_PASSWORD}
+                  APP_S3_BUCKET: ${APP_S3_BUCKET}
+                  APP_S3_REGION: ${APP_S3_REGION}
+                  APP_S3_PUBLIC_BASE_URL: ${APP_S3_PUBLIC_BASE_URL}
+                  APP_USER_EVENTS_ENABLED: ${APP_USER_EVENTS_ENABLED}
+                  APP_USER_EVENTS_QUEUE_URL: ${APP_USER_EVENTS_QUEUE_URL}
+                  APP_USER_EVENTS_REGION: ${APP_USER_EVENTS_REGION}
+                  APP_USER_EVENTS_WAIT_TIME_SECONDS: ${APP_USER_EVENTS_WAIT_TIME_SECONDS}
+                  APP_USER_EVENTS_MAX_MESSAGES: ${APP_USER_EVENTS_MAX_MESSAGES}
+                  APP_USER_EVENTS_POLL_DELAY_MS: ${APP_USER_EVENTS_POLL_DELAY_MS}
+                  AWS_REGION: ${APP_S3_REGION}
+                  AWS_DEFAULT_REGION: ${APP_S3_REGION}
 
             volumes:
               postgres_data:
             EOF
 
             cd "${APP_DIR}"
+            COMPOSE_PROJECT_NAME="tech-blog" \
             IMAGE_URI="${IMAGE_URI}" \
             POSTGRES_DB="${POSTGRES_DB}" \
             POSTGRES_USER="${POSTGRES_USER}" \
             POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
+            APP_S3_BUCKET="${APP_S3_BUCKET}" \
+            APP_S3_REGION="${APP_S3_REGION}" \
+            APP_S3_PUBLIC_BASE_URL="${APP_S3_PUBLIC_BASE_URL}" \
+            APP_USER_EVENTS_ENABLED="${APP_USER_EVENTS_ENABLED}" \
+            APP_USER_EVENTS_QUEUE_URL="${APP_USER_EVENTS_QUEUE_URL}" \
+            APP_USER_EVENTS_REGION="${APP_USER_EVENTS_REGION}" \
+            APP_USER_EVENTS_WAIT_TIME_SECONDS="${APP_USER_EVENTS_WAIT_TIME_SECONDS}" \
+            APP_USER_EVENTS_MAX_MESSAGES="${APP_USER_EVENTS_MAX_MESSAGES}" \
+            APP_USER_EVENTS_POLL_DELAY_MS="${APP_USER_EVENTS_POLL_DELAY_MS}" \
             docker compose pull
 
+            COMPOSE_PROJECT_NAME="tech-blog" \
             IMAGE_URI="${IMAGE_URI}" \
             POSTGRES_DB="${POSTGRES_DB}" \
             POSTGRES_USER="${POSTGRES_USER}" \
             POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
+            APP_S3_BUCKET="${APP_S3_BUCKET}" \
+            APP_S3_REGION="${APP_S3_REGION}" \
+            APP_S3_PUBLIC_BASE_URL="${APP_S3_PUBLIC_BASE_URL}" \
+            APP_USER_EVENTS_ENABLED="${APP_USER_EVENTS_ENABLED}" \
+            APP_USER_EVENTS_QUEUE_URL="${APP_USER_EVENTS_QUEUE_URL}" \
+            APP_USER_EVENTS_REGION="${APP_USER_EVENTS_REGION}" \
+            APP_USER_EVENTS_WAIT_TIME_SECONDS="${APP_USER_EVENTS_WAIT_TIME_SECONDS}" \
+            APP_USER_EVENTS_MAX_MESSAGES="${APP_USER_EVENTS_MAX_MESSAGES}" \
+            APP_USER_EVENTS_POLL_DELAY_MS="${APP_USER_EVENTS_POLL_DELAY_MS}" \
             docker compose up -d --remove-orphans
+
+            for i in {1..30}; do
+              if docker exec tech-blog-postgres psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -tAc "SELECT to_regclass('public.posts') IS NOT NULL AND to_regclass('public.users') IS NOT NULL;" | grep -q "t"; then
+                echo "Verified: public.posts and public.users tables exist"
+                break
+              fi
+
+              if [[ "$i" -eq 30 ]]; then
+                echo "ERROR: public.posts/public.users table does not exist after deploy"
+                docker logs --tail 200 tech-blog || true
+                exit 1
+              fi
+
+              sleep 2
+            done
 
             docker image prune -f --filter "until=72h"

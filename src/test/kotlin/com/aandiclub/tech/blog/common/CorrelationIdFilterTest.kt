@@ -14,7 +14,7 @@ class CorrelationIdFilterTest : StringSpec({
 
 	"should propagate provided correlation id" {
 		val exchange = MockServerWebExchange.from(
-			MockServerHttpRequest.get("/api/v1/posts")
+			MockServerHttpRequest.get("/v1/posts")
 				.header(CorrelationIdFilter.HEADER_NAME, "trace-abc")
 				.build(),
 		)

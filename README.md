@@ -25,17 +25,25 @@
 - `AWS_REGION` (example: `ap-northeast-2`)
 - `ECR_REPOSITORY` (example: `tech-blog`)
 - `APP_DIR` (optional, default: `/opt/tech-blog`)
-- `DEPLOY_PORT` (optional, default: `22`)
+- `AWS_PORT` (optional, default: `22`)
 - `POSTGRES_DB` (optional, default: `tech_blog`)
 - `POSTGRES_USER` (optional, default: `tech_blog`)
+- `APP_USER_EVENTS_ENABLED` (optional, default: `false`)
+- `APP_USER_EVENTS_REGION` (optional, default: `AWS_REGION`)
+- `APP_USER_EVENTS_WAIT_TIME_SECONDS` (optional, default: `20`)
+- `APP_USER_EVENTS_MAX_MESSAGES` (optional, default: `10`)
+- `APP_USER_EVENTS_POLL_DELAY_MS` (optional, default: `1000`)
 
 ### Repository Secrets (`Settings > Secrets and variables > Actions > Secrets`)
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `DEPLOY_HOST`
-- `DEPLOY_USER`
-- `DEPLOY_SSH_KEY`
+- `AWS_ROLE_TO_ASSUME`
+- `AWS_HOST`
+- `AWS_USER`
+- `AWS_SSH_KEY`
 - `POSTGRES_PASSWORD`
+- `APP_S3_BUCKET`
+- `APP_S3_REGION`
+- `APP_S3_PUBLIC_BASE_URL`
+- `APP_USER_EVENTS_QUEUE_URL` (required if `APP_USER_EVENTS_ENABLED=true`)
 
 ## Release example
 
@@ -54,4 +62,4 @@ docker compose up -d
 
 ## Notes
 - Target instance must have `docker`, `docker compose`, and `aws cli`.
-- Current workflow logs into ECR on the instance using `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` passed from GitHub Secrets.
+- Current workflow uses GitHub OIDC + `AWS_ROLE_TO_ASSUME` to authenticate in GitHub Actions.

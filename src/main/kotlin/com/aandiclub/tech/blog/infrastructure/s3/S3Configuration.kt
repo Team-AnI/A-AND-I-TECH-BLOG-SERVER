@@ -12,6 +12,6 @@ class S3Configuration {
 	fun s3AsyncClient(s3Properties: S3Properties): S3AsyncClient =
 		S3AsyncClient.builder()
 			.region(Region.of(s3Properties.region))
-			.credentialsProvider(DefaultCredentialsProvider.create())
+			.credentialsProvider(DefaultCredentialsProvider.builder().build())
 			.build()
 }

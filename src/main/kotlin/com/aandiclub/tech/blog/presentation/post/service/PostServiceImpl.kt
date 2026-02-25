@@ -2,16 +2,19 @@ package com.aandiclub.tech.blog.presentation.post.service
 
 import com.aandiclub.tech.blog.domain.post.Post
 import com.aandiclub.tech.blog.domain.post.PostStatus
+import com.aandiclub.tech.blog.domain.user.User
 import com.aandiclub.tech.blog.infrastructure.post.PostRepository
+import com.aandiclub.tech.blog.infrastructure.user.UserRepository
 import com.aandiclub.tech.blog.presentation.post.dto.CreatePostRequest
+import com.aandiclub.tech.blog.presentation.post.dto.PostAuthorResponse
 import com.aandiclub.tech.blog.presentation.post.dto.PagedPostResponse
 import com.aandiclub.tech.blog.presentation.post.dto.PatchPostRequest
 import com.aandiclub.tech.blog.presentation.post.dto.PostResponse
 import kotlinx.coroutines.reactor.awaitSingle
+import kotlinx.coroutines.flow.toList
+import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
-import org.springframework.data.r2dbc.core.R2dbcEntityTemplate
-import org.springframework.data.relational.core.query.Criteria
-import org.springframework.data.relational.core.query.Query
+import org.springframework.data.r2dbc.core.R2dbcEntityOperations
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.web.server.ResponseStatusException
@@ -22,43 +25,46 @@ import kotlin.math.ceil
 @Service
 class PostServiceImpl(
 	private val postRepository: PostRepository,
-	private val r2dbcEntityTemplate: R2dbcEntityTemplate,
+	private val userRepository: UserRepository,
+	private val entityOperations: R2dbcEntityOperations,
 ) : PostService {
 
 	override suspend fun create(request: CreatePostRequest): PostResponse {
+		val upsertedAuthor = upsertAuthorFromRequest(request.author)
 		val post = Post(
 			title = request.title,
 			contentMarkdown = request.contentMarkdown,
-			authorId = request.authorId,
+			thumbnailUrl = request.thumbnailUrl,
+			authorId = request.author.id,
 			status = request.status,
 		)
-		return postRepository.save(post).toResponse()
+		return entityOperations.insert(post).awaitSingle()
+			.toResponse(upsertedAuthor?.toAuthorResponse() ?: resolveAuthor(request.author.id, request.author.nickname, request.author.profileImageUrl))
 	}
 
 	override suspend fun get(postId: UUID): PostResponse =
-		postRepository.findByIdAndStatusNot(postId, PostStatus.Deleted)?.toResponse()
-			?: throw notFound(postId)
+		postRepository.findByIdAndStatusNot(postId, PostStatus.Deleted)?.let { post ->
+			post.toResponse(resolveAuthor(post.authorId))
+		} ?: throw notFound(postId)
 
 	override suspend fun list(page: Int, size: Int, status: PostStatus?): PagedPostResponse {
-		val criteria = if (status == null) {
-			Criteria.where("status").not(PostStatus.Deleted.name)
-		} else {
-			Criteria.where("status").`is`(status.name)
+		if (status == PostStatus.Draft) {
+			throw ResponseStatusException(HttpStatus.BAD_REQUEST, "draft posts are only available in draft list")
 		}
+		return listByStatus(page, size, status ?: PostStatus.Published)
+	}
 
-		val selectQuery = Query.query(criteria)
-			.sort(Sort.by(Sort.Order.desc("created_at")))
-			.limit(size)
-			.offset((page * size).toLong())
-		val countQuery = Query.query(criteria)
+	override suspend fun listDrafts(page: Int, size: Int): PagedPostResponse =
+		listByStatus(page, size, PostStatus.Draft)
 
-		val items = r2dbcEntityTemplate.select(Post::class.java)
-			.matching(selectQuery)
-			.all()
-			.map { it.toResponse() }
-			.collectList()
-			.awaitSingle()
-		val totalElements = r2dbcEntityTemplate.count(countQuery, Post::class.java).awaitSingle()
+	private suspend fun listByStatus(page: Int, size: Int, status: PostStatus): PagedPostResponse {
+		val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
+		val posts = postRepository.findByStatus(status, pageable).toList()
+		val usersById = loadUsersById(posts.map { it.authorId }.toSet())
+		val items = posts.map { post ->
+			post.toResponse(usersById[post.authorId]?.toAuthorResponse() ?: fallbackAuthor(post.authorId))
+		}
+		val totalElements = postRepository.countByStatus(status)
 		val totalPages = if (totalElements == 0L) 0 else ceil(totalElements.toDouble() / size.toDouble()).toInt()
 
 		return PagedPostResponse(
@@ -72,13 +78,21 @@ class PostServiceImpl(
 
 	override suspend fun patch(postId: UUID, request: PatchPostRequest): PostResponse {
 		val current = postRepository.findByIdAndStatusNot(postId, PostStatus.Deleted) ?: throw notFound(postId)
+		val upsertedAuthor = request.author?.let { upsertAuthorFromRequest(it) }
+		val patchedAuthorId = request.author?.id ?: current.authorId
 		val updated = current.copy(
 			title = request.title ?: current.title,
 			contentMarkdown = request.contentMarkdown ?: current.contentMarkdown,
+			thumbnailUrl = request.thumbnailUrl ?: current.thumbnailUrl,
+			authorId = patchedAuthorId,
 			status = request.status ?: current.status,
 			updatedAt = Instant.now(),
 		)
-		return postRepository.save(updated).toResponse()
+		val saved = postRepository.save(updated)
+		return saved.toResponse(
+			upsertedAuthor?.takeIf { it.id == saved.authorId }?.toAuthorResponse()
+				?: resolveAuthor(saved.authorId, request.author?.nickname, request.author?.profileImageUrl),
+		)
 	}
 
 	override suspend fun delete(postId: UUID) {
@@ -94,11 +108,72 @@ class PostServiceImpl(
 	private fun notFound(postId: UUID): ResponseStatusException =
 		ResponseStatusException(HttpStatus.NOT_FOUND, "post not found: $postId")
 
-	private fun Post.toResponse() = PostResponse(
+	private suspend fun loadUsersById(authorIds: Set<String>): Map<String, User> {
+		if (authorIds.isEmpty()) return emptyMap()
+		return userRepository.findAllById(authorIds).toList().associateBy { it.id }
+	}
+
+	private suspend fun upsertAuthorFromRequest(author: com.aandiclub.tech.blog.presentation.post.dto.PostAuthorRequest): User? {
+		val existing = userRepository.findById(author.id)
+		val nickname = author.nickname?.takeIf { it.isNotBlank() } ?: existing?.nickname
+		val thumbnailUrl = author.profileImageUrl ?: existing?.thumbnailUrl
+
+		// Legacy payload(authorId string) can miss nickname; skip upsert in that case.
+		if (nickname == null) return existing
+
+		if (existing == null) {
+			return userRepository.save(
+				User(
+					id = author.id,
+					nickname = nickname,
+					thumbnailUrl = thumbnailUrl,
+				),
+			)
+		}
+
+		if (existing.nickname == nickname && existing.thumbnailUrl == thumbnailUrl) {
+			return existing
+		}
+
+		return userRepository.save(
+			existing.copy(
+				nickname = nickname,
+				thumbnailUrl = thumbnailUrl,
+				updatedAt = Instant.now(),
+			),
+		)
+	}
+
+	private suspend fun resolveAuthor(
+		authorId: String,
+		fallbackNickname: String? = null,
+		fallbackThumbnailUrl: String? = null,
+	): PostAuthorResponse =
+		userRepository.findById(authorId)?.toAuthorResponse()
+			?: fallbackAuthor(authorId, fallbackNickname, fallbackThumbnailUrl)
+
+	private fun User.toAuthorResponse() = PostAuthorResponse(
+		id = id,
+		nickname = nickname,
+		profileImageUrl = thumbnailUrl,
+	)
+
+	private fun fallbackAuthor(
+		authorId: String,
+		nickname: String? = null,
+		thumbnailUrl: String? = null,
+	) = PostAuthorResponse(
+		id = authorId,
+		nickname = nickname?.takeIf { it.isNotBlank() } ?: "unknown",
+		profileImageUrl = thumbnailUrl,
+	)
+
+	private fun Post.toResponse(author: PostAuthorResponse) = PostResponse(
 		id = id,
 		title = title,
 		contentMarkdown = contentMarkdown,
-		authorId = authorId,
+		thumbnailUrl = thumbnailUrl,
+		author = author,
 		status = status,
 		createdAt = createdAt,
 		updatedAt = updatedAt,

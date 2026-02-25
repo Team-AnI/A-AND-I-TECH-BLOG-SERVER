@@ -1,0 +1,5 @@
+{
+  "last_turn_at": "2026-02-23T12:27:36.789Z",
+  "turn_count": 18,
+  "last_agent_output": "현재 워킹트리에서 커밋 안 된 변경은 이런 내용입니다.\n\n- `/.github/workflows/deploy-tag.yml`\n  - 배포 후 `public.posts` 테이블 존재"
+}

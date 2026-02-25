@@ -14,10 +14,10 @@ class ImageControllerTest : StringSpec({
 	val service = mockk<ImageUploadService>()
 	val webTestClient = WebTestClient.bindToController(ImageController(service)).build()
 
-	"POST /api/v1/images should return upload metadata" {
+	"POST /v1/posts/images should return upload metadata" {
 		coEvery { service.upload(any()) } returns ImageUploadResponse(
-			url = "https://bucket.s3.us-east-1.amazonaws.com/images/abc.png",
-			key = "images/abc.png",
+			url = "https://bucket.s3.us-east-1.amazonaws.com/posts/abc.png",
+			key = "posts/abc.png",
 			contentType = "image/png",
 			size = 4,
 		)
@@ -31,15 +31,16 @@ class ImageControllerTest : StringSpec({
 		).contentType(MediaType.IMAGE_PNG)
 
 		webTestClient.post()
-			.uri("/api/v1/images")
+			.uri("/v1/posts/images")
 			.contentType(MediaType.MULTIPART_FORM_DATA)
 			.body(BodyInserters.fromMultipartData(bodyBuilder.build()))
 			.exchange()
 			.expectStatus().isOk
 			.expectBody()
-			.jsonPath("$.url").isEqualTo("https://bucket.s3.us-east-1.amazonaws.com/images/abc.png")
-			.jsonPath("$.key").isEqualTo("images/abc.png")
-			.jsonPath("$.contentType").isEqualTo("image/png")
-			.jsonPath("$.size").isEqualTo(4)
+			.jsonPath("$.success").isEqualTo(true)
+			.jsonPath("$.data.url").isEqualTo("https://bucket.s3.us-east-1.amazonaws.com/posts/abc.png")
+			.jsonPath("$.data.key").isEqualTo("posts/abc.png")
+			.jsonPath("$.data.contentType").isEqualTo("image/png")
+			.jsonPath("$.data.size").isEqualTo(4)
 	}
 })

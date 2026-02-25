@@ -3,7 +3,6 @@ package com.aandiclub.tech.blog.domain.post
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
-import java.util.UUID
 
 class PostTest : StringSpec({
 	"title must be between 1 and 200 characters" {
@@ -11,7 +10,7 @@ class PostTest : StringSpec({
 			Post(
 				title = "",
 				contentMarkdown = "content",
-				authorId = UUID.randomUUID(),
+				authorId = "u-1",
 			)
 		}
 
@@ -19,7 +18,7 @@ class PostTest : StringSpec({
 			Post(
 				title = "a".repeat(201),
 				contentMarkdown = "content",
-				authorId = UUID.randomUUID(),
+				authorId = "u-2",
 			)
 		}
 	}
@@ -29,7 +28,7 @@ class PostTest : StringSpec({
 			Post(
 				title = "valid title",
 				contentMarkdown = " ",
-				authorId = UUID.randomUUID(),
+				authorId = "u-3",
 			)
 		}
 	}
@@ -38,7 +37,7 @@ class PostTest : StringSpec({
 		val post = Post(
 			title = "valid title",
 			contentMarkdown = "content",
-			authorId = UUID.randomUUID(),
+			authorId = "u-4",
 		)
 
 		post.status shouldBe PostStatus.Draft
