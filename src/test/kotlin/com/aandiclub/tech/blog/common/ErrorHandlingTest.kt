@@ -1,5 +1,6 @@
 package com.aandiclub.tech.blog.common
 
+import com.aandiclub.tech.blog.common.auth.AuthTokenService
 import com.aandiclub.tech.blog.common.error.GlobalExceptionHandler
 import com.aandiclub.tech.blog.common.filter.CorrelationIdFilter
 import com.aandiclub.tech.blog.domain.post.PostStatus
@@ -20,7 +21,8 @@ import java.util.UUID
 class ErrorHandlingTest : StringSpec({
 	val postService = mockk<PostService>()
 	val imageUploadService = mockk<ImageUploadService>()
-	val client = WebTestClient.bindToController(PostController(postService, imageUploadService))
+	val authTokenService = mockk<AuthTokenService>()
+	val client = WebTestClient.bindToController(PostController(postService, imageUploadService, authTokenService))
 		.controllerAdvice(GlobalExceptionHandler())
 		.build()
 

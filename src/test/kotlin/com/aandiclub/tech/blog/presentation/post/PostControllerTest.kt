@@ -1,5 +1,6 @@
 package com.aandiclub.tech.blog.presentation.post
 
+import com.aandiclub.tech.blog.common.auth.AuthTokenService
 import com.aandiclub.tech.blog.domain.post.PostStatus
 import com.aandiclub.tech.blog.presentation.image.ImageUploadService
 import com.aandiclub.tech.blog.presentation.image.dto.ImageUploadResponse
@@ -24,7 +25,8 @@ import java.util.UUID
 class PostControllerTest : StringSpec({
 	val service = mockk<PostService>()
 	val imageUploadService = mockk<ImageUploadService>()
-	val webTestClient = WebTestClient.bindToController(PostController(service, imageUploadService)).build()
+	val authTokenService = mockk<AuthTokenService>()
+	val webTestClient = WebTestClient.bindToController(PostController(service, imageUploadService, authTokenService)).build()
 
 	"POST /v1/posts should return 201" {
 		val postId = UUID.randomUUID()
@@ -70,29 +72,13 @@ class PostControllerTest : StringSpec({
 			.jsonPath("$.data.status").isEqualTo("Draft")
 	}
 
-	"POST /v1/posts should accept legacy authorId string" {
-		val postId = UUID.randomUUID()
+	"POST /v1/posts should reject scalar author in multipart post payload" {
 		val authorId = "u-legacy-1"
-		val now = Instant.parse("2026-02-15T12:00:00Z")
-		coEvery { service.create(match { it.author.id == authorId }) } returns
-			PostResponse(
-				id = postId,
-				title = "title",
-				contentMarkdown = "content",
-				author = PostAuthorResponse(
-					id = authorId,
-					nickname = "unknown",
-					profileImageUrl = null,
-				),
-				status = PostStatus.Draft,
-				createdAt = now,
-				updatedAt = now,
-			)
 
 		val multipart = MultipartBodyBuilder()
 		multipart.part(
 			"post",
-			"""{"title":"title","contentMarkdown":"content","authorId":"$authorId","status":"Draft"}""",
+			"""{"title":"title","contentMarkdown":"content","author":"$authorId","status":"Draft"}""",
 		).header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
 
 		webTestClient.post()
@@ -100,11 +86,7 @@ class PostControllerTest : StringSpec({
 			.contentType(MediaType.MULTIPART_FORM_DATA)
 			.bodyValue(multipart.build())
 			.exchange()
-			.expectStatus().isCreated
-			.expectBody()
-			.jsonPath("$.success").isEqualTo(true)
-			.jsonPath("$.data.author.id").isEqualTo(authorId)
-			.jsonPath("$.data.status").isEqualTo("Draft")
+			.expectStatus().isBadRequest
 	}
 
 	"POST /v1/posts multipart should upload thumbnail and return 201" {
@@ -283,9 +265,12 @@ class PostControllerTest : StringSpec({
 	"PATCH /v1/posts/{id} should return 200" {
 		val postId = UUID.randomUUID()
 		val authorId = "u-1005"
+		val requesterId = "u-1005"
+		val authorization = "Bearer patch-token"
 		val now = Instant.parse("2026-02-15T12:00:00Z")
 		val thumbnailUrl = "https://cdn.example.com/posts/thumbnail-updated.webp"
-		coEvery { service.patch(eq(postId), any()) } returns
+		coEvery { authTokenService.extractUserId(eq(authorization)) } returns requesterId
+		coEvery { service.patch(eq(postId), eq(requesterId), any()) } returns
 			PostResponse(
 				id = postId,
 				title = "updated",
@@ -303,6 +288,7 @@ class PostControllerTest : StringSpec({
 
 		webTestClient.patch()
 			.uri("/v1/posts/$postId")
+			.header(HttpHeaders.AUTHORIZATION, authorization)
 			.bodyValue(
 				PatchPostRequest(
 					title = "updated",
@@ -319,6 +305,120 @@ class PostControllerTest : StringSpec({
 			.jsonPath("$.data.thumbnailUrl").isEqualTo(thumbnailUrl)
 			.jsonPath("$.data.author.id").isEqualTo(authorId)
 			.jsonPath("$.data.status").isEqualTo("Published")
+	}
+
+	"PATCH /v1/posts/{id} multipart should upload thumbnail and return 200" {
+		val postId = UUID.randomUUID()
+		val authorId = "u-1006"
+		val requesterId = "u-1006"
+		val authorization = "Bearer patch-token-2"
+		val now = Instant.parse("2026-02-15T12:00:00Z")
+		val uploadedThumbnailUrl = "https://cdn.example.com/posts/uploaded-patch-thumb.webp"
+		coEvery { authTokenService.extractUserId(eq(authorization)) } returns requesterId
+		coEvery { imageUploadService.upload(any()) } returns
+			ImageUploadResponse(
+				url = uploadedThumbnailUrl,
+				key = "posts/uploaded-patch-thumb.webp",
+				contentType = "image/webp",
+				size = 3,
+			)
+		coEvery {
+			service.patch(
+				eq(postId),
+				eq(requesterId),
+				match { it.title == "updated" && it.thumbnailUrl == uploadedThumbnailUrl },
+			)
+		} returns
+			PostResponse(
+				id = postId,
+				title = "updated",
+				contentMarkdown = "updated-content",
+				thumbnailUrl = uploadedThumbnailUrl,
+				author = PostAuthorResponse(
+					id = authorId,
+					nickname = "neo",
+					profileImageUrl = "https://cdn.example.com/users/neo.webp",
+				),
+				status = PostStatus.Published,
+				createdAt = now,
+				updatedAt = now,
+			)
+
+		val multipart = MultipartBodyBuilder()
+		multipart.part(
+			"post",
+			"""{"title":"updated","contentMarkdown":"updated-content","status":"Published"}""",
+		).header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+		multipart.part(
+			"thumbnail",
+			object : ByteArrayResource(byteArrayOf(1, 2, 3)) {
+				override fun getFilename(): String = "thumbnail.webp"
+			},
+		).contentType(MediaType.parseMediaType("image/webp"))
+
+		webTestClient.patch()
+			.uri("/v1/posts/$postId")
+			.header(HttpHeaders.AUTHORIZATION, authorization)
+			.contentType(MediaType.MULTIPART_FORM_DATA)
+			.bodyValue(multipart.build())
+			.exchange()
+			.expectStatus().isOk
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(true)
+			.jsonPath("$.data.thumbnailUrl").isEqualTo(uploadedThumbnailUrl)
+	}
+
+	"POST /v1/posts/{id}/collaborators should return updated post" {
+		val postId = UUID.randomUUID()
+		val ownerId = "u-owner-1"
+		val collaboratorId = "u-collab-1"
+		val authorization = "Bearer collab-token"
+		val now = Instant.parse("2026-02-15T12:00:00Z")
+		coEvery { authTokenService.extractUserId(eq(authorization)) } returns ownerId
+		coEvery { service.addCollaborator(eq(postId), eq(ownerId), any()) } returns
+			PostResponse(
+				id = postId,
+				title = "title",
+				contentMarkdown = "content",
+				author = PostAuthorResponse(
+					id = ownerId,
+					nickname = "owner",
+					profileImageUrl = null,
+				),
+				collaborators = listOf(
+					PostAuthorResponse(
+						id = collaboratorId,
+						nickname = "collab",
+						profileImageUrl = "https://cdn.example.com/users/collab.webp",
+					),
+				),
+				status = PostStatus.Published,
+				createdAt = now,
+				updatedAt = now,
+			)
+
+		webTestClient.post()
+			.uri("/v1/posts/$postId/collaborators")
+			.header(HttpHeaders.AUTHORIZATION, authorization)
+			.contentType(MediaType.APPLICATION_JSON)
+			.bodyValue(
+				"""
+				{
+				  "ownerId":"$ownerId",
+				  "collaborator":{
+				    "id":"$collaboratorId",
+				    "nickname":"collab",
+				    "profileImageUrl":"https://cdn.example.com/users/collab.webp"
+				  }
+				}
+				""".trimIndent(),
+			)
+			.exchange()
+			.expectStatus().isOk
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(true)
+			.jsonPath("$.data.collaborators[0].id").isEqualTo(collaboratorId)
+			.jsonPath("$.data.author.id").isEqualTo(ownerId)
 	}
 
 	"DELETE /v1/posts/{id} should return success envelope" {

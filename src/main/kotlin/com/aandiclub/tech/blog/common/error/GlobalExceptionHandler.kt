@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.bind.support.WebExchangeBindException
 import org.springframework.web.server.ResponseStatusException
+import org.springframework.web.server.ServerWebInputException
 
 @RestControllerAdvice
 class GlobalExceptionHandler {
@@ -41,6 +42,17 @@ class GlobalExceptionHandler {
 			),
 		)
 	}
+
+	@ExceptionHandler(ServerWebInputException::class)
+	fun handleServerWebInputException(
+		exception: ServerWebInputException,
+	): ResponseEntity<ApiResponse<Nothing>> =
+		ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
+			ApiResponse.failure(
+				code = "BAD_REQUEST",
+				message = exception.cause?.message ?: exception.reason ?: "Failed to read HTTP message",
+			),
+		)
 
 	@ExceptionHandler(Exception::class)
 	fun handleUnhandledException(

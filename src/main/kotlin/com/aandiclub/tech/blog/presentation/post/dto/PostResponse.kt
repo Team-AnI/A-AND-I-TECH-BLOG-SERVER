@@ -10,6 +10,7 @@ data class PostResponse(
 	val contentMarkdown: String,
 	val thumbnailUrl: String? = null,
 	val author: PostAuthorResponse,
+	val collaborators: List<PostAuthorResponse> = emptyList(),
 	val status: PostStatus,
 	val createdAt: Instant,
 	val updatedAt: Instant,
