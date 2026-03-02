@@ -26,6 +26,8 @@ data class Post(
 	init {
 		require(title.isNotBlank()) { "title must not be blank" }
 		require(title.length <= 200) { "title must be less than or equal to 200 characters" }
-		require(contentMarkdown.isNotBlank()) { "contentMarkdown must not be blank" }
+		if (status == PostStatus.Published) {
+			require(contentMarkdown.isNotBlank()) { "contentMarkdown must not be blank when published" }
+		}
 	}
 }

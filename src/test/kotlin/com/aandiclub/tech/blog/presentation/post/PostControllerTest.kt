@@ -262,6 +262,53 @@ class PostControllerTest : StringSpec({
 			.jsonPath("$.data.items[0].status").isEqualTo("Draft")
 	}
 
+	"GET /v1/posts/drafts/me should return my draft paged response" {
+		val requesterId = "u-me-1"
+		val authorization = "Bearer drafts-me-token"
+		val now = Instant.parse("2026-02-15T12:00:00Z")
+		coEvery { authTokenService.extractUserId(eq(authorization)) } returns requesterId
+		coEvery { service.listMyDrafts(0, 20, requesterId) } returns
+			PagedPostResponse(
+				items = listOf(
+					PostResponse(
+						id = UUID.randomUUID(),
+						title = "my draft title",
+						contentMarkdown = "my draft content",
+						author = PostAuthorResponse(
+							id = requesterId,
+							nickname = "me",
+							profileImageUrl = null,
+						),
+						collaborators = listOf(
+							PostAuthorResponse(
+								id = "u-collab-1",
+								nickname = "collab",
+								profileImageUrl = null,
+							),
+						),
+						status = PostStatus.Draft,
+						createdAt = now,
+						updatedAt = now,
+					),
+				),
+				page = 0,
+				size = 20,
+				totalElements = 1,
+				totalPages = 1,
+			)
+
+		webTestClient.get()
+			.uri("/v1/posts/drafts/me?page=0&size=20")
+			.header(HttpHeaders.AUTHORIZATION, authorization)
+			.exchange()
+			.expectStatus().isOk
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(true)
+			.jsonPath("$.data.totalElements").isEqualTo(1)
+			.jsonPath("$.data.items[0].status").isEqualTo("Draft")
+			.jsonPath("$.data.items[0].author.id").isEqualTo(requesterId)
+	}
+
 	"PATCH /v1/posts/{id} should return 200" {
 		val postId = UUID.randomUUID()
 		val authorId = "u-1005"

@@ -13,7 +13,6 @@ data class CreatePostRequest(
 	@field:NotBlank
 	@field:Size(max = 200)
 	val title: String,
-	@field:NotBlank
 	val contentMarkdown: String,
 	val thumbnailUrl: String? = null,
 	@field:Valid

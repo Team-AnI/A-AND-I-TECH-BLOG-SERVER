@@ -35,6 +35,7 @@ class PostServiceImpl(
 ) : PostService {
 
 	override suspend fun create(request: CreatePostRequest): PostResponse {
+		validatePostByStatus(request.title, request.contentMarkdown, request.status)
 		val upsertedAuthor = upsertAuthorFromRequest(request.author)
 		val post = Post(
 			title = request.title,
@@ -63,6 +64,30 @@ class PostServiceImpl(
 
 	override suspend fun listDrafts(page: Int, size: Int): PagedPostResponse =
 		listByStatus(page, size, PostStatus.Draft)
+
+	override suspend fun listMyDrafts(page: Int, size: Int, requesterId: String): PagedPostResponse {
+		val actorId = normalizeRequesterId(requesterId)
+		val offset = page.toLong() * size.toLong()
+		val posts = postRepository.findDraftsByUser(actorId, size, offset).toList()
+		val usersById = loadUsersById(posts.map { it.authorId }.toSet())
+		val collaboratorsByPostId = loadCollaboratorsByPostId(posts.map { it.id }.toSet())
+		val items = posts.map { post ->
+			post.toResponse(
+				author = usersById[post.authorId]?.toAuthorResponse() ?: fallbackAuthor(post.authorId),
+				collaborators = collaboratorsByPostId[post.id] ?: emptyList(),
+			)
+		}
+		val totalElements = postRepository.countDraftsByUser(actorId)
+		val totalPages = if (totalElements == 0L) 0 else ceil(totalElements.toDouble() / size.toDouble()).toInt()
+
+		return PagedPostResponse(
+			items = items,
+			page = page,
+			size = size,
+			totalElements = totalElements,
+			totalPages = totalPages,
+		)
+	}
 
 	private suspend fun listByStatus(page: Int, size: Int, status: PostStatus): PagedPostResponse {
 		val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"))
@@ -96,12 +121,16 @@ class PostServiceImpl(
 			throw ResponseStatusException(HttpStatus.BAD_REQUEST, "primary author cannot be changed")
 		}
 		val upsertedAuthor = request.author?.let { upsertAuthorFromRequest(it) }
+		val nextTitle = request.title ?: current.title
+		val nextContentMarkdown = request.contentMarkdown ?: current.contentMarkdown
+		val nextStatus = request.status ?: current.status
+		validatePostByStatus(nextTitle, nextContentMarkdown, nextStatus)
 		val updated = current.copy(
-			title = request.title ?: current.title,
-			contentMarkdown = request.contentMarkdown ?: current.contentMarkdown,
+			title = nextTitle,
+			contentMarkdown = nextContentMarkdown,
 			thumbnailUrl = request.thumbnailUrl ?: current.thumbnailUrl,
 			authorId = current.authorId,
-			status = request.status ?: current.status,
+			status = nextStatus,
 			updatedAt = Instant.now(),
 		)
 		val saved = postRepository.save(updated)
@@ -154,6 +183,15 @@ class PostServiceImpl(
 			throw ResponseStatusException(HttpStatus.BAD_REQUEST, "requester id is required")
 		}
 		return actorId
+	}
+
+	private fun validatePostByStatus(title: String, contentMarkdown: String, status: PostStatus) {
+		if (title.isBlank()) {
+			throw ResponseStatusException(HttpStatus.BAD_REQUEST, "title is required")
+		}
+		if (status == PostStatus.Published && contentMarkdown.isBlank()) {
+			throw ResponseStatusException(HttpStatus.BAD_REQUEST, "contentMarkdown is required for published post")
+		}
 	}
 
 	override suspend fun delete(postId: UUID) {

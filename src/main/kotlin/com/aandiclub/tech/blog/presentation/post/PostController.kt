@@ -104,6 +104,23 @@ class PostController(
 	): ResponseEntity<ApiResponse<PagedPostResponse>> =
 		ResponseEntity.ok(ApiResponse.success(postService.listDrafts(page, size)))
 
+	@GetMapping("/drafts/me")
+	@Operation(summary = "List my draft posts (owner or collaborator)")
+	@ApiResponses(
+		value = [
+			SwaggerApiResponse(responseCode = "200", description = "OK", content = [Content(schema = Schema(implementation = PagedPostResponse::class))]),
+			SwaggerApiResponse(responseCode = "401", description = "Unauthorized"),
+		],
+	)
+	suspend fun listMyDrafts(
+		@RequestHeader(HttpHeaders.AUTHORIZATION, required = false) authorization: String?,
+		@RequestParam(defaultValue = "0") @Min(0) page: Int,
+		@RequestParam(defaultValue = "20") @Min(1) @Max(100) size: Int,
+	): ResponseEntity<ApiResponse<PagedPostResponse>> {
+		val requesterId = authTokenService.extractUserId(authorization)
+		return ResponseEntity.ok(ApiResponse.success(postService.listMyDrafts(page, size, requesterId)))
+	}
+
 	@PatchMapping("/{postId}", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
 	@Operation(summary = "Patch post (multipart, optional thumbnail upload)")
 	@ApiResponses(
