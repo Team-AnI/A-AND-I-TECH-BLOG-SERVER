@@ -45,8 +45,11 @@ class PostServiceImpl(
 			status = request.status,
 		)
 		val saved = entityOperations.insert(post).awaitSingle()
+		saveCollaborators(saved.id, saved.authorId, request.collaborators.orEmpty())
+		val collaborators = loadCollaborators(saved.id)
 		return saved.toResponse(
 			author = upsertedAuthor?.toAuthorResponse() ?: resolveAuthor(request.author.id, request.author.nickname, request.author.profileImageUrl),
+			collaborators = collaborators,
 		)
 	}
 
@@ -126,8 +129,12 @@ class PostServiceImpl(
 
 	override suspend fun patch(postId: UUID, requesterId: String, request: PatchPostRequest): PostResponse {
 		val current = postRepository.findByIdAndStatusNot(postId, PostStatus.Deleted) ?: throw notFound(postId)
-		if (!canEdit(current.id, current.authorId, requesterId)) {
+		val actorId = normalizeRequesterId(requesterId)
+		if (!canEdit(current.id, current.authorId, actorId)) {
 			throw ResponseStatusException(HttpStatus.FORBIDDEN, "only post owner or collaborator can edit")
+		}
+		if (request.collaborators != null && actorId != current.authorId) {
+			throw ResponseStatusException(HttpStatus.FORBIDDEN, "only post owner can modify collaborators")
 		}
 		if (request.author != null && request.author.id != current.authorId) {
 			throw ResponseStatusException(HttpStatus.BAD_REQUEST, "primary author cannot be changed")
@@ -146,6 +153,9 @@ class PostServiceImpl(
 			updatedAt = Instant.now(),
 		)
 		val saved = postRepository.save(updated)
+		request.collaborators?.let { collaborators ->
+			saveCollaborators(saved.id, saved.authorId, collaborators)
+		}
 		val collaborators = loadCollaborators(saved.id)
 		return saved.toResponse(
 			author = upsertedAuthor?.toAuthorResponse()
@@ -165,26 +175,11 @@ class PostServiceImpl(
 		if (post.authorId != actorId) {
 			throw ResponseStatusException(HttpStatus.FORBIDDEN, "only post owner can add collaborators")
 		}
-		val collaboratorId = request.collaborator.id
-		if (collaboratorId == post.authorId) {
-			throw ResponseStatusException(HttpStatus.BAD_REQUEST, "owner is already the primary author")
-		}
-		if (upsertAuthorFromRequest(request.collaborator) == null) {
-			throw ResponseStatusException(HttpStatus.BAD_REQUEST, "collaborator nickname is required for new user")
-		}
-		if (!postCollaboratorRepository.existsByPostIdAndUserId(postId, collaboratorId)) {
-			postCollaboratorRepository.save(
-				PostCollaborator(
-					postId = postId,
-					userId = collaboratorId,
-				),
-			)
-		}
+		saveCollaborators(postId, post.authorId, listOf(request.collaborator))
 		return buildPostResponse(post)
 	}
 
-	private suspend fun canEdit(postId: UUID, ownerId: String, requesterId: String): Boolean {
-		val actorId = normalizeRequesterId(requesterId)
+	private suspend fun canEdit(postId: UUID, ownerId: String, actorId: String): Boolean {
 		if (actorId == ownerId) return true
 		return postCollaboratorRepository.existsByPostIdAndUserId(postId, actorId)
 	}
@@ -203,6 +198,28 @@ class PostServiceImpl(
 		}
 		if (status == PostStatus.Published && contentMarkdown.isBlank()) {
 			throw ResponseStatusException(HttpStatus.BAD_REQUEST, "contentMarkdown is required for published post")
+		}
+	}
+
+	private suspend fun saveCollaborators(postId: UUID, ownerId: String, collaborators: List<PostAuthorRequest>) {
+		if (collaborators.isEmpty()) return
+		val uniqueCollaborators = collaborators.associateBy { it.id }.values
+		for (collaborator in uniqueCollaborators) {
+			val collaboratorId = collaborator.id
+			if (collaboratorId == ownerId) {
+				throw ResponseStatusException(HttpStatus.BAD_REQUEST, "owner is already the primary author")
+			}
+			if (upsertAuthorFromRequest(collaborator) == null) {
+				throw ResponseStatusException(HttpStatus.BAD_REQUEST, "collaborator nickname is required for new user")
+			}
+			if (!postCollaboratorRepository.existsByPostIdAndUserId(postId, collaboratorId)) {
+				postCollaboratorRepository.save(
+					PostCollaborator(
+						postId = postId,
+						userId = collaboratorId,
+					),
+				)
+			}
 		}
 	}
 

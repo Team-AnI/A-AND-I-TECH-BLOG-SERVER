@@ -17,5 +17,7 @@ data class PatchPostRequest(
 	@get:JsonAlias("authorId")
 	@field:JsonAlias("authorId")
 	val author: PostAuthorRequest? = null,
+	@field:Valid
+	val collaborators: List<PostAuthorRequest>? = null,
 	val status: PostStatus? = null,
 )

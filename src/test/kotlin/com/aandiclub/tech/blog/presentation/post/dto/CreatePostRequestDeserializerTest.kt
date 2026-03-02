@@ -17,4 +17,26 @@ class CreatePostRequestDeserializerTest : StringSpec({
 		request.author.id shouldBe "u-legacy-1"
 		request.status.name shouldBe "Draft"
 	}
+
+	"should deserialize collaborators payload" {
+		val mapper = ObjectMapper().findAndRegisterModules()
+		val request = mapper.readValue(
+			"""{"title":"title","contentMarkdown":"content","author":{"id":"u-owner-1","nickname":"owner"},"collaborators":[{"id":"u-collab-1","nickname":"collab"}],"status":"Draft"}""",
+			CreatePostRequest::class.java,
+		)
+
+		request.collaborators?.size shouldBe 1
+		request.collaborators?.get(0)?.id shouldBe "u-collab-1"
+	}
+
+	"should deserialize payload with thumbnail and profile image url" {
+		val mapper = ObjectMapper().findAndRegisterModules()
+		val request = mapper.readValue(
+			"""{"title":"title","contentMarkdown":"content","thumbnailUrl":"https://cdn.example.com/posts/thumbnail-1.webp","author":{"id":"u-1001","nickname":"neo","profileImageUrl":"https://cdn.example.com/users/neo.webp"},"status":"Draft"}""",
+			CreatePostRequest::class.java,
+		)
+
+		request.thumbnailUrl shouldBe "https://cdn.example.com/posts/thumbnail-1.webp"
+		request.author.profileImageUrl shouldBe "https://cdn.example.com/users/neo.webp"
+	}
 })

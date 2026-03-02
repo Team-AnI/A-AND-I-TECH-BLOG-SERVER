@@ -21,5 +21,7 @@ data class CreatePostRequest(
 	@get:JsonAlias("authorId")
 	@field:JsonAlias("authorId")
 	val author: PostAuthorRequest,
+	@field:Valid
+	val collaborators: List<PostAuthorRequest>? = null,
 	val status: PostStatus = PostStatus.Published,
 )

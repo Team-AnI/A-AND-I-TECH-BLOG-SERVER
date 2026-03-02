@@ -145,6 +145,58 @@ class PostControllerTest : StringSpec({
 			.jsonPath("$.data.status").isEqualTo("Published")
 	}
 
+	"POST /v1/posts should pass collaborators from payload" {
+		val postId = UUID.randomUUID()
+		val authorId = "u-owner-c1"
+		val collaboratorId = "u-collab-c1"
+		val now = Instant.parse("2026-02-15T12:00:00Z")
+		coEvery {
+			service.create(
+				match {
+					it.author.id == authorId &&
+						it.collaborators?.size == 1 &&
+						it.collaborators?.get(0)?.id == collaboratorId
+				},
+			)
+		} returns
+			PostResponse(
+				id = postId,
+				title = "title",
+				contentMarkdown = "content",
+				author = PostAuthorResponse(
+					id = authorId,
+					nickname = "owner",
+					profileImageUrl = null,
+				),
+				collaborators = listOf(
+					PostAuthorResponse(
+						id = collaboratorId,
+						nickname = "collab",
+						profileImageUrl = null,
+					),
+				),
+				status = PostStatus.Draft,
+				createdAt = now,
+				updatedAt = now,
+			)
+
+		val multipart = MultipartBodyBuilder()
+		multipart.part(
+			"post",
+			"""{"title":"title","contentMarkdown":"content","author":{"id":"$authorId","nickname":"owner"},"collaborators":[{"id":"$collaboratorId","nickname":"collab"}],"status":"Draft"}""",
+		).header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+
+		webTestClient.post()
+			.uri("/v1/posts")
+			.contentType(MediaType.MULTIPART_FORM_DATA)
+			.bodyValue(multipart.build())
+			.exchange()
+			.expectStatus().isCreated
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(true)
+			.jsonPath("$.data.collaborators[0].id").isEqualTo(collaboratorId)
+	}
+
 	"GET /v1/posts/{id} should return 404 when not found" {
 		coEvery { service.get(any()) } throws ResponseStatusException(HttpStatus.NOT_FOUND)
 
@@ -399,6 +451,66 @@ class PostControllerTest : StringSpec({
 			.jsonPath("$.data.thumbnailUrl").isEqualTo(thumbnailUrl)
 			.jsonPath("$.data.author.id").isEqualTo(authorId)
 			.jsonPath("$.data.status").isEqualTo("Published")
+	}
+
+	"PATCH /v1/posts/{id} should pass collaborators from payload" {
+		val postId = UUID.randomUUID()
+		val authorId = "u-owner-p1"
+		val collaboratorId = "u-collab-p1"
+		val requesterId = authorId
+		val authorization = "Bearer patch-collab-token"
+		val now = Instant.parse("2026-02-15T12:00:00Z")
+		coEvery { authTokenService.extractUserId(eq(authorization)) } returns requesterId
+		coEvery {
+			service.patch(
+				eq(postId),
+				eq(requesterId),
+				match {
+					it.collaborators?.size == 1 &&
+						it.collaborators?.get(0)?.id == collaboratorId
+				},
+			)
+		} returns
+			PostResponse(
+				id = postId,
+				title = "updated",
+				contentMarkdown = "updated-content",
+				author = PostAuthorResponse(
+					id = authorId,
+					nickname = "owner",
+					profileImageUrl = null,
+				),
+				collaborators = listOf(
+					PostAuthorResponse(
+						id = collaboratorId,
+						nickname = "collab",
+						profileImageUrl = null,
+					),
+				),
+				status = PostStatus.Published,
+				createdAt = now,
+				updatedAt = now,
+			)
+
+		webTestClient.patch()
+			.uri("/v1/posts/$postId")
+			.header(HttpHeaders.AUTHORIZATION, authorization)
+			.contentType(MediaType.APPLICATION_JSON)
+			.bodyValue(
+				"""
+				{
+				  "title":"updated",
+				  "contentMarkdown":"updated-content",
+				  "status":"Published",
+				  "collaborators":[{"id":"$collaboratorId","nickname":"collab"}]
+				}
+				""".trimIndent(),
+			)
+			.exchange()
+			.expectStatus().isOk
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(true)
+			.jsonPath("$.data.collaborators[0].id").isEqualTo(collaboratorId)
 	}
 
 	"PATCH /v1/posts/{id} multipart should upload thumbnail and return 200" {

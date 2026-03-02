@@ -18,14 +18,15 @@ class PatchPostRequestDeserializer : JsonDeserializer<PatchPostRequest>() {
 			?: node.path("authorId").takeIf { !it.isMissingNode && !it.isNull }
 		val author = authorNode?.let { parser.codec.treeToValue(it, PostAuthorRequest::class.java) }
 
-		return PatchPostRequest(
-			title = readText(node, "title"),
-			contentMarkdown = readText(node, "contentMarkdown"),
-			thumbnailUrl = readText(node, "thumbnailUrl"),
-			author = author,
-			status = readStatus(parser, node.path("status")),
-		)
-	}
+			return PatchPostRequest(
+				title = readText(node, "title"),
+				contentMarkdown = readText(node, "contentMarkdown"),
+				thumbnailUrl = readText(node, "thumbnailUrl"),
+				author = author,
+				collaborators = readCollaborators(parser, node),
+				status = readStatus(parser, node.path("status")),
+			)
+		}
 
 	private fun readStatus(parser: JsonParser, node: JsonNode): PostStatus? {
 		if (node.isMissingNode || node.isNull) return null
@@ -40,5 +41,15 @@ class PatchPostRequestDeserializer : JsonDeserializer<PatchPostRequest>() {
 		val value = node.path(field)
 		if (value.isMissingNode || value.isNull) return null
 		return value.asText()
+	}
+
+	private fun readCollaborators(parser: JsonParser, node: JsonNode): List<PostAuthorRequest>? {
+		val collaboratorsNode = node.path("collaborators").takeIf { !it.isMissingNode && !it.isNull }
+			?: node.path("collaboratorIds").takeIf { !it.isMissingNode && !it.isNull }
+			?: return null
+		if (!collaboratorsNode.isArray) {
+			throw InvalidFormatException(parser, "collaborators must be array", collaboratorsNode, List::class.java)
+		}
+		return parser.codec.treeToValue(collaboratorsNode, Array<PostAuthorRequest>::class.java).toList()
 	}
 }

@@ -18,20 +18,22 @@ class CreatePostRequestDeserializer : JsonDeserializer<CreatePostRequest>() {
 			?: node.path("authorId").takeIf { !it.isMissingNode && !it.isNull }
 			?: throw InvalidFormatException(parser, "author is required", node, PostAuthorRequest::class.java)
 
-		val title = node.path("title").asText("")
-		val contentMarkdown = node.path("contentMarkdown").asText("")
-		val thumbnailUrl = readText(node, "thumbnailUrl")
-		val status = readStatus(parser, node.path("status")) ?: PostStatus.Published
-		val author = parser.codec.treeToValue(authorNode, PostAuthorRequest::class.java)
+			val title = node.path("title").asText("")
+			val contentMarkdown = node.path("contentMarkdown").asText("")
+			val thumbnailUrl = readText(node, "thumbnailUrl")
+			val status = readStatus(parser, node.path("status")) ?: PostStatus.Published
+			val author = parser.codec.treeToValue(authorNode, PostAuthorRequest::class.java)
+			val collaborators = readCollaborators(parser, node)
 
-		return CreatePostRequest(
-			title = title,
-			contentMarkdown = contentMarkdown,
-			thumbnailUrl = thumbnailUrl,
-			author = author,
-			status = status,
-		)
-	}
+			return CreatePostRequest(
+				title = title,
+				contentMarkdown = contentMarkdown,
+				thumbnailUrl = thumbnailUrl,
+				author = author,
+				collaborators = collaborators,
+				status = status,
+			)
+		}
 
 	private fun readStatus(parser: JsonParser, node: JsonNode): PostStatus? {
 		if (node.isMissingNode || node.isNull) return null
@@ -46,5 +48,15 @@ class CreatePostRequestDeserializer : JsonDeserializer<CreatePostRequest>() {
 		val value = node.path(field)
 		if (value.isMissingNode || value.isNull) return null
 		return value.asText()
+	}
+
+	private fun readCollaborators(parser: JsonParser, node: JsonNode): List<PostAuthorRequest> {
+		val collaboratorsNode = node.path("collaborators").takeIf { !it.isMissingNode && !it.isNull }
+			?: node.path("collaboratorIds").takeIf { !it.isMissingNode && !it.isNull }
+			?: return emptyList()
+		if (!collaboratorsNode.isArray) {
+			throw InvalidFormatException(parser, "collaborators must be array", collaboratorsNode, List::class.java)
+		}
+		return parser.codec.treeToValue(collaboratorsNode, Array<PostAuthorRequest>::class.java).toList()
 	}
 }
