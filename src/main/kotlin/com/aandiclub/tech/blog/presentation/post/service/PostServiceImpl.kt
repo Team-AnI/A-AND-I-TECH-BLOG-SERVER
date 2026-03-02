@@ -62,31 +62,20 @@ class PostServiceImpl(
 		return listByStatus(page, size, status ?: PostStatus.Published)
 	}
 
+	override suspend fun listMyPosts(page: Int, size: Int, requesterId: String, status: PostStatus?): PagedPostResponse {
+		if (status == PostStatus.Draft) {
+			throw ResponseStatusException(HttpStatus.BAD_REQUEST, "draft posts are only available in draft list")
+		}
+		val actorId = normalizeRequesterId(requesterId)
+		return listByStatusAndUser(page, size, status ?: PostStatus.Published, actorId)
+	}
+
 	override suspend fun listDrafts(page: Int, size: Int): PagedPostResponse =
 		listByStatus(page, size, PostStatus.Draft)
 
 	override suspend fun listMyDrafts(page: Int, size: Int, requesterId: String): PagedPostResponse {
 		val actorId = normalizeRequesterId(requesterId)
-		val offset = page.toLong() * size.toLong()
-		val posts = postRepository.findDraftsByUser(actorId, size, offset).toList()
-		val usersById = loadUsersById(posts.map { it.authorId }.toSet())
-		val collaboratorsByPostId = loadCollaboratorsByPostId(posts.map { it.id }.toSet())
-		val items = posts.map { post ->
-			post.toResponse(
-				author = usersById[post.authorId]?.toAuthorResponse() ?: fallbackAuthor(post.authorId),
-				collaborators = collaboratorsByPostId[post.id] ?: emptyList(),
-			)
-		}
-		val totalElements = postRepository.countDraftsByUser(actorId)
-		val totalPages = if (totalElements == 0L) 0 else ceil(totalElements.toDouble() / size.toDouble()).toInt()
-
-		return PagedPostResponse(
-			items = items,
-			page = page,
-			size = size,
-			totalElements = totalElements,
-			totalPages = totalPages,
-		)
+		return listByStatusAndUser(page, size, PostStatus.Draft, actorId)
 	}
 
 	private suspend fun listByStatus(page: Int, size: Int, status: PostStatus): PagedPostResponse {
@@ -101,6 +90,29 @@ class PostServiceImpl(
 			)
 		}
 		val totalElements = postRepository.countByStatus(status)
+		val totalPages = if (totalElements == 0L) 0 else ceil(totalElements.toDouble() / size.toDouble()).toInt()
+
+		return PagedPostResponse(
+			items = items,
+			page = page,
+			size = size,
+			totalElements = totalElements,
+			totalPages = totalPages,
+		)
+	}
+
+	private suspend fun listByStatusAndUser(page: Int, size: Int, status: PostStatus, userId: String): PagedPostResponse {
+		val offset = page.toLong() * size.toLong()
+		val posts = postRepository.findByStatusAndUser(status, userId, size, offset).toList()
+		val usersById = loadUsersById(posts.map { it.authorId }.toSet())
+		val collaboratorsByPostId = loadCollaboratorsByPostId(posts.map { it.id }.toSet())
+		val items = posts.map { post ->
+			post.toResponse(
+				author = usersById[post.authorId]?.toAuthorResponse() ?: fallbackAuthor(post.authorId),
+				collaborators = collaboratorsByPostId[post.id] ?: emptyList(),
+			)
+		}
+		val totalElements = postRepository.countByStatusAndUser(status, userId)
 		val totalPages = if (totalElements == 0L) 0 else ceil(totalElements.toDouble() / size.toDouble()).toInt()
 
 		return PagedPostResponse(

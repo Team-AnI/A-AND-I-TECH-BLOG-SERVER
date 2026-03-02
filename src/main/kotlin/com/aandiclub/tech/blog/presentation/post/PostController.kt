@@ -91,6 +91,24 @@ class PostController(
 	): ResponseEntity<ApiResponse<PagedPostResponse>> =
 		ResponseEntity.ok(ApiResponse.success(postService.list(page, size, status)))
 
+	@GetMapping("/me")
+	@Operation(summary = "List my posts (owner or collaborator)")
+	@ApiResponses(
+		value = [
+			SwaggerApiResponse(responseCode = "200", description = "OK", content = [Content(schema = Schema(implementation = PagedPostResponse::class))]),
+			SwaggerApiResponse(responseCode = "401", description = "Unauthorized"),
+		],
+	)
+	suspend fun listMyPosts(
+		@RequestHeader(HttpHeaders.AUTHORIZATION, required = false) authorization: String?,
+		@RequestParam(defaultValue = "0") @Min(0) page: Int,
+		@RequestParam(defaultValue = "20") @Min(1) @Max(100) size: Int,
+		@RequestParam(required = false) status: PostStatus?,
+	): ResponseEntity<ApiResponse<PagedPostResponse>> {
+		val requesterId = authTokenService.extractUserId(authorization)
+		return ResponseEntity.ok(ApiResponse.success(postService.listMyPosts(page, size, requesterId, status)))
+	}
+
 	@GetMapping("/drafts")
 	@Operation(summary = "List draft posts")
 	@ApiResponses(

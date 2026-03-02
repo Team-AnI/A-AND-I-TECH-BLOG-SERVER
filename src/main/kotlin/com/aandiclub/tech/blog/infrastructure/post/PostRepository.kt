@@ -19,7 +19,7 @@ interface PostRepository : CoroutineCrudRepository<Post, UUID> {
 		"""
 		SELECT p.*
 		FROM posts p
-		WHERE p.status = 'Draft'
+		WHERE p.status = :status
 		  AND (
 		    p.author_id = :userId
 		    OR EXISTS (
@@ -33,13 +33,13 @@ interface PostRepository : CoroutineCrudRepository<Post, UUID> {
 		LIMIT :limit OFFSET :offset
 		""",
 	)
-	fun findDraftsByUser(userId: String, limit: Int, offset: Long): Flow<Post>
+	fun findByStatusAndUser(status: PostStatus, userId: String, limit: Int, offset: Long): Flow<Post>
 
 	@Query(
 		"""
 		SELECT COUNT(*)
 		FROM posts p
-		WHERE p.status = 'Draft'
+		WHERE p.status = :status
 		  AND (
 		    p.author_id = :userId
 		    OR EXISTS (
@@ -51,5 +51,6 @@ interface PostRepository : CoroutineCrudRepository<Post, UUID> {
 		  )
 		""",
 	)
-	suspend fun countDraftsByUser(userId: String): Long
+	suspend fun countByStatusAndUser(status: PostStatus, userId: String): Long
+
 }

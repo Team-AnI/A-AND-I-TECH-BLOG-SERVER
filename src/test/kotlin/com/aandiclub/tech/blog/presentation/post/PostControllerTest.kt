@@ -226,6 +226,53 @@ class PostControllerTest : StringSpec({
 			.jsonPath("$.data.items[0].status").isEqualTo("Published")
 	}
 
+	"GET /v1/posts/me should return my post paged response" {
+		val requesterId = "u-me-2"
+		val authorization = "Bearer posts-me-token"
+		val now = Instant.parse("2026-02-15T12:00:00Z")
+		coEvery { authTokenService.extractUserId(eq(authorization)) } returns requesterId
+		coEvery { service.listMyPosts(0, 20, requesterId, null) } returns
+			PagedPostResponse(
+				items = listOf(
+					PostResponse(
+						id = UUID.randomUUID(),
+						title = "my published title",
+						contentMarkdown = "my published content",
+						author = PostAuthorResponse(
+							id = requesterId,
+							nickname = "me",
+							profileImageUrl = null,
+						),
+						collaborators = listOf(
+							PostAuthorResponse(
+								id = "u-collab-2",
+								nickname = "collab",
+								profileImageUrl = null,
+							),
+						),
+						status = PostStatus.Published,
+						createdAt = now,
+						updatedAt = now,
+					),
+				),
+				page = 0,
+				size = 20,
+				totalElements = 1,
+				totalPages = 1,
+			)
+
+		webTestClient.get()
+			.uri("/v1/posts/me?page=0&size=20")
+			.header(HttpHeaders.AUTHORIZATION, authorization)
+			.exchange()
+			.expectStatus().isOk
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(true)
+			.jsonPath("$.data.totalElements").isEqualTo(1)
+			.jsonPath("$.data.items[0].status").isEqualTo("Published")
+			.jsonPath("$.data.items[0].author.id").isEqualTo(requesterId)
+	}
+
 	"GET /v1/posts/drafts should return draft paged response" {
 		val authorId = "u-1004"
 		val now = Instant.parse("2026-02-15T12:00:00Z")
