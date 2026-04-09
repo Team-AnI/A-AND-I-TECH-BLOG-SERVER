@@ -12,8 +12,20 @@ springdoc:
     path: /v3/api-docs
   swagger-ui:
     path: /swagger-ui.html
+    disable-swagger-default-url: true
+    urls:
+      - name: v1
+        url: /v3/api-docs/v1
+      - name: v2
+        url: /v3/api-docs/v2
 
 app:
+  auth:
+    jwt:
+      issuer-uri: ${APP_AUTH_JWT_ISSUER_URI:}
+      jwk-set-uri: ${APP_AUTH_JWT_JWK_SET_URI:}
+      shared-secret: ${AUTH_JWT_SECRET:${APP_AUTH_JWT_SHARED_SECRET:}}
+      user-id-claim: ${APP_AUTH_JWT_USER_ID_CLAIM:userId}
   user-events:
     enabled: false
     queue-url: ""

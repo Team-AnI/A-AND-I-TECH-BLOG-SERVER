@@ -22,6 +22,7 @@ jobs:
       POSTGRES_DB: ${{ vars.POSTGRES_DB || 'tech_blog' }}
       POSTGRES_USER: ${{ vars.POSTGRES_USER || 'tech_blog' }}
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      AUTH_JWT_SECRET: ${{ secrets.AUTH_JWT_SECRET }}
       APP_S3_BUCKET: ${{ secrets.APP_S3_BUCKET }}
       APP_S3_REGION: ${{ secrets.APP_S3_REGION }}
       APP_S3_PUBLIC_BASE_URL: ${{ secrets.APP_S3_PUBLIC_BASE_URL }}
@@ -71,6 +72,7 @@ jobs:
           POSTGRES_DB: ${{ env.POSTGRES_DB }}
           POSTGRES_USER: ${{ env.POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          AUTH_JWT_SECRET: ${{ env.AUTH_JWT_SECRET }}
           APP_S3_BUCKET: ${{ env.APP_S3_BUCKET }}
           APP_S3_REGION: ${{ env.APP_S3_REGION }}
           APP_S3_PUBLIC_BASE_URL: ${{ env.APP_S3_PUBLIC_BASE_URL }}
@@ -85,9 +87,10 @@ jobs:
           username: ${{ secrets.AWS_USER }}
           key: ${{ secrets.AWS_SSH_KEY }}
           port: ${{ vars.AWS_PORT || '22' }}
-          envs: AWS_REGION,IMAGE_URI,APP_DIR,POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD,APP_S3_BUCKET,APP_S3_REGION,APP_S3_PUBLIC_BASE_URL,APP_USER_EVENTS_ENABLED,APP_USER_EVENTS_QUEUE_URL,APP_USER_EVENTS_REGION,APP_USER_EVENTS_WAIT_TIME_SECONDS,APP_USER_EVENTS_MAX_MESSAGES,APP_USER_EVENTS_POLL_DELAY_MS
+          envs: AWS_REGION,IMAGE_URI,APP_DIR,POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD,AUTH_JWT_SECRET,APP_S3_BUCKET,APP_S3_REGION,APP_S3_PUBLIC_BASE_URL,APP_USER_EVENTS_ENABLED,APP_USER_EVENTS_QUEUE_URL,APP_USER_EVENTS_REGION,APP_USER_EVENTS_WAIT_TIME_SECONDS,APP_USER_EVENTS_MAX_MESSAGES,APP_USER_EVENTS_POLL_DELAY_MS
           script: |
             set -euo pipefail
+            : "${AUTH_JWT_SECRET:?AUTH_JWT_SECRET is required}"
             : "${APP_S3_BUCKET:?APP_S3_BUCKET is required}"
             : "${APP_S3_REGION:?APP_S3_REGION is required}"
             if [[ "${APP_USER_EVENTS_ENABLED}" == "true" ]]; then
@@ -136,6 +139,7 @@ jobs:
                   SPRING_FLYWAY_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
                   SPRING_FLYWAY_USER: ${POSTGRES_USER}
                   SPRING_FLYWAY_PASSWORD: ${POSTGRES_PASSWORD}
+                  AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
                   APP_S3_BUCKET: ${APP_S3_BUCKET}
                   APP_S3_REGION: ${APP_S3_REGION}
                   APP_S3_PUBLIC_BASE_URL: ${APP_S3_PUBLIC_BASE_URL}
@@ -158,6 +162,7 @@ jobs:
             POSTGRES_DB="${POSTGRES_DB}" \
             POSTGRES_USER="${POSTGRES_USER}" \
             POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
+            AUTH_JWT_SECRET="${AUTH_JWT_SECRET}" \
             APP_S3_BUCKET="${APP_S3_BUCKET}" \
             APP_S3_REGION="${APP_S3_REGION}" \
             APP_S3_PUBLIC_BASE_URL="${APP_S3_PUBLIC_BASE_URL}" \
@@ -174,6 +179,7 @@ jobs:
             POSTGRES_DB="${POSTGRES_DB}" \
             POSTGRES_USER="${POSTGRES_USER}" \
             POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
+            AUTH_JWT_SECRET="${AUTH_JWT_SECRET}" \
             APP_S3_BUCKET="${APP_S3_BUCKET}" \
             APP_S3_REGION="${APP_S3_REGION}" \
             APP_S3_PUBLIC_BASE_URL="${APP_S3_PUBLIC_BASE_URL}" \

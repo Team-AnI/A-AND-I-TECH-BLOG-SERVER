@@ -1,6 +1,8 @@
 package com.aandiclub.tech.blog.presentation.post
 
+import com.aandiclub.tech.blog.common.auth.AuthTokenService
 import com.aandiclub.tech.blog.domain.post.PostStatus
+import com.aandiclub.tech.blog.domain.post.PostType
 import com.aandiclub.tech.blog.presentation.image.ImageUploadService
 import com.aandiclub.tech.blog.presentation.image.dto.ImageUploadResponse
 import com.aandiclub.tech.blog.presentation.post.dto.PagedPostResponse
@@ -24,7 +26,8 @@ import java.util.UUID
 class PostControllerTest : StringSpec({
 	val service = mockk<PostService>()
 	val imageUploadService = mockk<ImageUploadService>()
-	val webTestClient = WebTestClient.bindToController(PostController(service, imageUploadService)).build()
+	val authTokenService = mockk<AuthTokenService>()
+	val webTestClient = WebTestClient.bindToController(PostController(service, imageUploadService, authTokenService)).build()
 
 	"POST /v1/posts should return 201" {
 		val postId = UUID.randomUUID()
@@ -41,6 +44,7 @@ class PostControllerTest : StringSpec({
 				nickname = "neo",
 				profileImageUrl = "https://cdn.example.com/users/neo.webp",
 			),
+			type = PostType.Blog,
 			status = PostStatus.Draft,
 			createdAt = now,
 			updatedAt = now,
@@ -67,32 +71,17 @@ class PostControllerTest : StringSpec({
 			.jsonPath("$.data.author.id").isEqualTo(authorId)
 			.jsonPath("$.data.author.nickname").isEqualTo("neo")
 			.jsonPath("$.data.author.profileImageUrl").isEqualTo("https://cdn.example.com/users/neo.webp")
+			.jsonPath("$.data.type").isEqualTo("Blog")
 			.jsonPath("$.data.status").isEqualTo("Draft")
 	}
 
-	"POST /v1/posts should accept legacy authorId string" {
-		val postId = UUID.randomUUID()
+	"POST /v1/posts should reject scalar author in multipart post payload" {
 		val authorId = "u-legacy-1"
-		val now = Instant.parse("2026-02-15T12:00:00Z")
-		coEvery { service.create(match { it.author.id == authorId }) } returns
-			PostResponse(
-				id = postId,
-				title = "title",
-				contentMarkdown = "content",
-				author = PostAuthorResponse(
-					id = authorId,
-					nickname = "unknown",
-					profileImageUrl = null,
-				),
-				status = PostStatus.Draft,
-				createdAt = now,
-				updatedAt = now,
-			)
 
 		val multipart = MultipartBodyBuilder()
 		multipart.part(
 			"post",
-			"""{"title":"title","contentMarkdown":"content","authorId":"$authorId","status":"Draft"}""",
+			"""{"title":"title","contentMarkdown":"content","author":"$authorId","status":"Draft"}""",
 		).header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
 
 		webTestClient.post()
@@ -100,11 +89,7 @@ class PostControllerTest : StringSpec({
 			.contentType(MediaType.MULTIPART_FORM_DATA)
 			.bodyValue(multipart.build())
 			.exchange()
-			.expectStatus().isCreated
-			.expectBody()
-			.jsonPath("$.success").isEqualTo(true)
-			.jsonPath("$.data.author.id").isEqualTo(authorId)
-			.jsonPath("$.data.status").isEqualTo("Draft")
+			.expectStatus().isBadRequest
 	}
 
 	"POST /v1/posts multipart should upload thumbnail and return 201" {
@@ -132,6 +117,7 @@ class PostControllerTest : StringSpec({
 					nickname = "neo",
 					profileImageUrl = "https://cdn.example.com/users/neo.webp",
 				),
+				type = PostType.Blog,
 				status = PostStatus.Published,
 				createdAt = now,
 				updatedAt = now,
@@ -140,7 +126,7 @@ class PostControllerTest : StringSpec({
 		val multipart = MultipartBodyBuilder()
 		multipart.part(
 			"post",
-			"""{"title":"title","contentMarkdown":"content","author":{"id":"$authorId","nickname":"neo","profileImageUrl":"https://cdn.example.com/users/neo.webp"},"status":"Published"}""",
+			"""{"title":"title","contentMarkdown":"content","author":{"id":"$authorId","nickname":"neo","profileImageUrl":"https://cdn.example.com/users/neo.webp"},"type":"Blog","status":"Published"}""",
 		).header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
 		multipart.part(
 			"thumbnail",
@@ -161,6 +147,59 @@ class PostControllerTest : StringSpec({
 			.jsonPath("$.data.thumbnailUrl").isEqualTo(uploadedThumbnailUrl)
 			.jsonPath("$.data.author.id").isEqualTo(authorId)
 			.jsonPath("$.data.status").isEqualTo("Published")
+	}
+
+	"POST /v1/posts should pass collaborators from payload" {
+		val postId = UUID.randomUUID()
+		val authorId = "u-owner-c1"
+		val collaboratorId = "u-collab-c1"
+		val now = Instant.parse("2026-02-15T12:00:00Z")
+		coEvery {
+			service.create(
+				match {
+					it.author.id == authorId &&
+						it.collaborators?.size == 1 &&
+						it.collaborators?.get(0)?.id == collaboratorId
+				},
+			)
+		} returns
+			PostResponse(
+				id = postId,
+				title = "title",
+				contentMarkdown = "content",
+				author = PostAuthorResponse(
+					id = authorId,
+					nickname = "owner",
+					profileImageUrl = null,
+				),
+				collaborators = listOf(
+					PostAuthorResponse(
+						id = collaboratorId,
+						nickname = "collab",
+						profileImageUrl = null,
+					),
+				),
+				type = PostType.Blog,
+				status = PostStatus.Draft,
+				createdAt = now,
+				updatedAt = now,
+			)
+
+		val multipart = MultipartBodyBuilder()
+		multipart.part(
+			"post",
+			"""{"title":"title","contentMarkdown":"content","author":{"id":"$authorId","nickname":"owner"},"collaborators":[{"id":"$collaboratorId","nickname":"collab"}],"type":"Blog","status":"Draft"}""",
+		).header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+
+		webTestClient.post()
+			.uri("/v1/posts")
+			.contentType(MediaType.MULTIPART_FORM_DATA)
+			.bodyValue(multipart.build())
+			.exchange()
+			.expectStatus().isCreated
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(true)
+			.jsonPath("$.data.collaborators[0].id").isEqualTo(collaboratorId)
 	}
 
 	"GET /v1/posts/{id} should return 404 when not found" {
@@ -186,6 +225,7 @@ class PostControllerTest : StringSpec({
 					nickname = "상욱",
 					profileImageUrl = "https://cdn.example.com/users/sangwook.webp",
 				),
+				type = PostType.Blog,
 				status = PostStatus.Published,
 				createdAt = now,
 				updatedAt = now,
@@ -205,7 +245,7 @@ class PostControllerTest : StringSpec({
 	"GET /v1/posts should return paged response" {
 		val authorId = "u-1003"
 		val now = Instant.parse("2026-02-15T12:00:00Z")
-		coEvery { service.list(0, 20, null) } returns
+		coEvery { service.list(0, 20, null, null) } returns
 			PagedPostResponse(
 				items = listOf(
 					PostResponse(
@@ -218,6 +258,7 @@ class PostControllerTest : StringSpec({
 							nickname = "neo",
 							profileImageUrl = "https://cdn.example.com/users/neo.webp",
 						),
+						type = PostType.Blog,
 						status = PostStatus.Published,
 						createdAt = now,
 						updatedAt = now,
@@ -241,13 +282,79 @@ class PostControllerTest : StringSpec({
 			.jsonPath("$.data.totalPages").isEqualTo(1)
 			.jsonPath("$.data.items[0].thumbnailUrl").isEqualTo("https://cdn.example.com/posts/thumbnail-list.webp")
 			.jsonPath("$.data.items[0].author.id").isEqualTo(authorId)
+			.jsonPath("$.data.items[0].type").isEqualTo("Blog")
 			.jsonPath("$.data.items[0].status").isEqualTo("Published")
+	}
+
+	"GET /v1/posts should pass lecture type filter" {
+		coEvery { service.list(0, 20, null, PostType.Lecture) } returns
+			PagedPostResponse(
+				items = emptyList(),
+				page = 0,
+				size = 20,
+				totalElements = 0,
+				totalPages = 0,
+			)
+
+		webTestClient.get()
+			.uri("/v1/posts?page=0&size=20&type=Lecture")
+			.exchange()
+			.expectStatus().isOk
+	}
+
+	"GET /v1/posts/me should return my post paged response" {
+		val requesterId = "u-me-2"
+		val authorization = "Bearer posts-me-token"
+		val now = Instant.parse("2026-02-15T12:00:00Z")
+		coEvery { authTokenService.extractUserId(eq(authorization)) } returns requesterId
+		coEvery { service.listMyPosts(0, 20, requesterId, null, null) } returns
+			PagedPostResponse(
+				items = listOf(
+					PostResponse(
+						id = UUID.randomUUID(),
+						title = "my published title",
+						contentMarkdown = "my published content",
+						author = PostAuthorResponse(
+							id = requesterId,
+							nickname = "me",
+							profileImageUrl = null,
+						),
+						collaborators = listOf(
+							PostAuthorResponse(
+								id = "u-collab-2",
+								nickname = "collab",
+								profileImageUrl = null,
+							),
+						),
+						type = PostType.Blog,
+						status = PostStatus.Published,
+						createdAt = now,
+						updatedAt = now,
+					),
+				),
+				page = 0,
+				size = 20,
+				totalElements = 1,
+				totalPages = 1,
+			)
+
+		webTestClient.get()
+			.uri("/v1/posts/me?page=0&size=20")
+			.header(HttpHeaders.AUTHORIZATION, authorization)
+			.exchange()
+			.expectStatus().isOk
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(true)
+			.jsonPath("$.data.totalElements").isEqualTo(1)
+			.jsonPath("$.data.items[0].type").isEqualTo("Blog")
+			.jsonPath("$.data.items[0].status").isEqualTo("Published")
+			.jsonPath("$.data.items[0].author.id").isEqualTo(requesterId)
 	}
 
 	"GET /v1/posts/drafts should return draft paged response" {
 		val authorId = "u-1004"
 		val now = Instant.parse("2026-02-15T12:00:00Z")
-		coEvery { service.listDrafts(0, 20) } returns
+		coEvery { service.listDrafts(0, 20, null) } returns
 			PagedPostResponse(
 				items = listOf(
 					PostResponse(
@@ -259,6 +366,7 @@ class PostControllerTest : StringSpec({
 							nickname = "neo",
 							profileImageUrl = null,
 						),
+						type = PostType.Blog,
 						status = PostStatus.Draft,
 						createdAt = now,
 						updatedAt = now,
@@ -277,15 +385,68 @@ class PostControllerTest : StringSpec({
 			.expectBody()
 			.jsonPath("$.success").isEqualTo(true)
 			.jsonPath("$.data.items[0].author.id").isEqualTo(authorId)
+			.jsonPath("$.data.items[0].type").isEqualTo("Blog")
 			.jsonPath("$.data.items[0].status").isEqualTo("Draft")
+	}
+
+	"GET /v1/posts/drafts/me should return my draft paged response" {
+		val requesterId = "u-me-1"
+		val authorization = "Bearer drafts-me-token"
+		val now = Instant.parse("2026-02-15T12:00:00Z")
+		coEvery { authTokenService.extractUserId(eq(authorization)) } returns requesterId
+		coEvery { service.listMyDrafts(0, 20, requesterId, null) } returns
+			PagedPostResponse(
+				items = listOf(
+					PostResponse(
+						id = UUID.randomUUID(),
+						title = "my draft title",
+						contentMarkdown = "my draft content",
+						author = PostAuthorResponse(
+							id = requesterId,
+							nickname = "me",
+							profileImageUrl = null,
+						),
+						collaborators = listOf(
+							PostAuthorResponse(
+								id = "u-collab-1",
+								nickname = "collab",
+								profileImageUrl = null,
+							),
+						),
+						type = PostType.Blog,
+						status = PostStatus.Draft,
+						createdAt = now,
+						updatedAt = now,
+					),
+				),
+				page = 0,
+				size = 20,
+				totalElements = 1,
+				totalPages = 1,
+			)
+
+		webTestClient.get()
+			.uri("/v1/posts/drafts/me?page=0&size=20")
+			.header(HttpHeaders.AUTHORIZATION, authorization)
+			.exchange()
+			.expectStatus().isOk
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(true)
+			.jsonPath("$.data.totalElements").isEqualTo(1)
+			.jsonPath("$.data.items[0].type").isEqualTo("Blog")
+			.jsonPath("$.data.items[0].status").isEqualTo("Draft")
+			.jsonPath("$.data.items[0].author.id").isEqualTo(requesterId)
 	}
 
 	"PATCH /v1/posts/{id} should return 200" {
 		val postId = UUID.randomUUID()
 		val authorId = "u-1005"
+		val requesterId = "u-1005"
+		val authorization = "Bearer patch-token"
 		val now = Instant.parse("2026-02-15T12:00:00Z")
 		val thumbnailUrl = "https://cdn.example.com/posts/thumbnail-updated.webp"
-		coEvery { service.patch(eq(postId), any()) } returns
+		coEvery { authTokenService.extractUserId(eq(authorization)) } returns requesterId
+		coEvery { service.patch(eq(postId), eq(requesterId), any()) } returns
 			PostResponse(
 				id = postId,
 				title = "updated",
@@ -296,6 +457,7 @@ class PostControllerTest : StringSpec({
 					nickname = "neo",
 					profileImageUrl = "https://cdn.example.com/users/neo.webp",
 				),
+				type = PostType.Blog,
 				status = PostStatus.Published,
 				createdAt = now,
 				updatedAt = now,
@@ -303,6 +465,7 @@ class PostControllerTest : StringSpec({
 
 		webTestClient.patch()
 			.uri("/v1/posts/$postId")
+			.header(HttpHeaders.AUTHORIZATION, authorization)
 			.bodyValue(
 				PatchPostRequest(
 					title = "updated",
@@ -318,7 +481,187 @@ class PostControllerTest : StringSpec({
 			.jsonPath("$.data.title").isEqualTo("updated")
 			.jsonPath("$.data.thumbnailUrl").isEqualTo(thumbnailUrl)
 			.jsonPath("$.data.author.id").isEqualTo(authorId)
+			.jsonPath("$.data.type").isEqualTo("Blog")
 			.jsonPath("$.data.status").isEqualTo("Published")
+	}
+
+	"PATCH /v1/posts/{id} should pass collaborators from payload" {
+		val postId = UUID.randomUUID()
+		val authorId = "u-owner-p1"
+		val collaboratorId = "u-collab-p1"
+		val requesterId = authorId
+		val authorization = "Bearer patch-collab-token"
+		val now = Instant.parse("2026-02-15T12:00:00Z")
+		coEvery { authTokenService.extractUserId(eq(authorization)) } returns requesterId
+		coEvery {
+			service.patch(
+				eq(postId),
+				eq(requesterId),
+				match {
+					it.collaborators?.size == 1 &&
+						it.collaborators?.get(0)?.id == collaboratorId
+				},
+			)
+		} returns
+			PostResponse(
+				id = postId,
+				title = "updated",
+				contentMarkdown = "updated-content",
+				author = PostAuthorResponse(
+					id = authorId,
+					nickname = "owner",
+					profileImageUrl = null,
+				),
+				collaborators = listOf(
+					PostAuthorResponse(
+						id = collaboratorId,
+						nickname = "collab",
+						profileImageUrl = null,
+					),
+				),
+				type = PostType.Lecture,
+				status = PostStatus.Published,
+				createdAt = now,
+				updatedAt = now,
+			)
+
+		webTestClient.patch()
+			.uri("/v1/posts/$postId")
+			.header(HttpHeaders.AUTHORIZATION, authorization)
+			.contentType(MediaType.APPLICATION_JSON)
+			.bodyValue(
+				"""
+				{
+				  "title":"updated",
+				  "contentMarkdown":"updated-content",
+				  "type":"Lecture",
+				  "status":"Published",
+				  "collaborators":[{"id":"$collaboratorId","nickname":"collab"}]
+				}
+				""".trimIndent(),
+			)
+			.exchange()
+			.expectStatus().isOk
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(true)
+			.jsonPath("$.data.type").isEqualTo("Lecture")
+			.jsonPath("$.data.collaborators[0].id").isEqualTo(collaboratorId)
+	}
+
+	"PATCH /v1/posts/{id} multipart should upload thumbnail and return 200" {
+		val postId = UUID.randomUUID()
+		val authorId = "u-1006"
+		val requesterId = "u-1006"
+		val authorization = "Bearer patch-token-2"
+		val now = Instant.parse("2026-02-15T12:00:00Z")
+		val uploadedThumbnailUrl = "https://cdn.example.com/posts/uploaded-patch-thumb.webp"
+		coEvery { authTokenService.extractUserId(eq(authorization)) } returns requesterId
+		coEvery { imageUploadService.upload(any()) } returns
+			ImageUploadResponse(
+				url = uploadedThumbnailUrl,
+				key = "posts/uploaded-patch-thumb.webp",
+				contentType = "image/webp",
+				size = 3,
+			)
+		coEvery {
+			service.patch(
+				eq(postId),
+				eq(requesterId),
+				match { it.title == "updated" && it.thumbnailUrl == uploadedThumbnailUrl },
+			)
+		} returns
+			PostResponse(
+				id = postId,
+				title = "updated",
+				contentMarkdown = "updated-content",
+				thumbnailUrl = uploadedThumbnailUrl,
+				author = PostAuthorResponse(
+					id = authorId,
+					nickname = "neo",
+					profileImageUrl = "https://cdn.example.com/users/neo.webp",
+				),
+				type = PostType.Blog,
+				status = PostStatus.Published,
+				createdAt = now,
+				updatedAt = now,
+			)
+
+		val multipart = MultipartBodyBuilder()
+		multipart.part(
+			"post",
+			"""{"title":"updated","contentMarkdown":"updated-content","status":"Published"}""",
+		).header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+		multipart.part(
+			"thumbnail",
+			object : ByteArrayResource(byteArrayOf(1, 2, 3)) {
+				override fun getFilename(): String = "thumbnail.webp"
+			},
+		).contentType(MediaType.parseMediaType("image/webp"))
+
+		webTestClient.patch()
+			.uri("/v1/posts/$postId")
+			.header(HttpHeaders.AUTHORIZATION, authorization)
+			.contentType(MediaType.MULTIPART_FORM_DATA)
+			.bodyValue(multipart.build())
+			.exchange()
+			.expectStatus().isOk
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(true)
+			.jsonPath("$.data.thumbnailUrl").isEqualTo(uploadedThumbnailUrl)
+	}
+
+	"POST /v1/posts/{id}/collaborators should return updated post" {
+		val postId = UUID.randomUUID()
+		val ownerId = "u-owner-1"
+		val collaboratorId = "u-collab-1"
+		val authorization = "Bearer collab-token"
+		val now = Instant.parse("2026-02-15T12:00:00Z")
+		coEvery { authTokenService.extractUserId(eq(authorization)) } returns ownerId
+		coEvery { service.addCollaborator(eq(postId), eq(ownerId), any()) } returns
+			PostResponse(
+				id = postId,
+				title = "title",
+				contentMarkdown = "content",
+				author = PostAuthorResponse(
+					id = ownerId,
+					nickname = "owner",
+					profileImageUrl = null,
+				),
+				collaborators = listOf(
+					PostAuthorResponse(
+						id = collaboratorId,
+						nickname = "collab",
+						profileImageUrl = "https://cdn.example.com/users/collab.webp",
+					),
+				),
+				type = PostType.Blog,
+				status = PostStatus.Published,
+				createdAt = now,
+				updatedAt = now,
+			)
+
+		webTestClient.post()
+			.uri("/v1/posts/$postId/collaborators")
+			.header(HttpHeaders.AUTHORIZATION, authorization)
+			.contentType(MediaType.APPLICATION_JSON)
+			.bodyValue(
+				"""
+				{
+				  "ownerId":"$ownerId",
+				  "collaborator":{
+				    "id":"$collaboratorId",
+				    "nickname":"collab",
+				    "profileImageUrl":"https://cdn.example.com/users/collab.webp"
+				  }
+				}
+				""".trimIndent(),
+			)
+			.exchange()
+			.expectStatus().isOk
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(true)
+			.jsonPath("$.data.collaborators[0].id").isEqualTo(collaboratorId)
+			.jsonPath("$.data.author.id").isEqualTo(ownerId)
 	}
 
 	"DELETE /v1/posts/{id} should return success envelope" {

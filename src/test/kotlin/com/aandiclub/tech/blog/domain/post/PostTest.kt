@@ -23,12 +23,24 @@ class PostTest : StringSpec({
 		}
 	}
 
-	"content markdown must not be blank" {
+	"blank content markdown is allowed for draft" {
+		val post = Post(
+			title = "draft title",
+			contentMarkdown = " ",
+			authorId = "u-3",
+			status = PostStatus.Draft,
+		)
+
+		post.status shouldBe PostStatus.Draft
+	}
+
+	"content markdown must not be blank when published" {
 		shouldThrow<IllegalArgumentException> {
 			Post(
 				title = "valid title",
 				contentMarkdown = " ",
 				authorId = "u-3",
+				status = PostStatus.Published,
 			)
 		}
 	}
@@ -41,5 +53,15 @@ class PostTest : StringSpec({
 		)
 
 		post.status shouldBe PostStatus.Draft
+	}
+
+	"default type should be Blog" {
+		val post = Post(
+			title = "valid title",
+			contentMarkdown = "content",
+			authorId = "u-5",
+		)
+
+		post.type shouldBe PostType.Blog
 	}
 })
