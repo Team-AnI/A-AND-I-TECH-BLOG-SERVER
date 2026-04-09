@@ -18,24 +18,39 @@ import org.springframework.test.web.reactive.server.WebTestClient
 class OpenApiDocumentationTest(
 	@LocalServerPort private val port: Int,
 ) : StringSpec({
-	"v3 api docs should include posts and images endpoints" {
-		val result = WebTestClient.bindToServer()
-			.baseUrl("http://localhost:$port")
-			.build()
-			.get()
-			.uri("/v3/api-docs")
-			.exchange()
-			.expectStatus().isOk
-			.expectBody()
-			.returnResult()
-			.responseBody
-			?.toString(Charsets.UTF_8)
-			.orEmpty()
+	fun fetch(path: String): String = WebTestClient.bindToServer()
+		.baseUrl("http://localhost:$port")
+		.build()
+		.get()
+		.uri(path)
+		.exchange()
+		.expectStatus().isOk
+		.expectBody()
+		.returnResult()
+		.responseBody
+		?.toString(Charsets.UTF_8)
+		.orEmpty()
 
-			result.shouldContain("/v1/posts")
-			result.shouldContain("/v1/posts/{postId}")
-			result.shouldContain("/v1/posts/drafts/me")
-			result.shouldContain("/v1/posts/images")
-			result.shouldContain("bearerAuth")
-		}
-	})
+	"v1 api docs should include only v1 blog endpoints" {
+		val result = fetch("/v3/api-docs/v1")
+
+		result.shouldContain("/v1/posts")
+		result.shouldContain("/v1/posts/{postId}")
+		result.shouldContain("/v1/posts/drafts/me")
+		result.shouldContain("/v1/posts/images")
+		result.shouldContain("bearerAuth")
+	}
+
+	"v2 api docs should include only v2 blog endpoints and A&I headers" {
+		val result = fetch("/v3/api-docs/v2")
+
+		result.shouldContain("/v2/posts")
+		result.shouldContain("/v2/posts/{postId}")
+		result.shouldContain("/v2/posts/drafts/me")
+		result.shouldContain("/v2/posts/images")
+		result.shouldContain("authenticateHeader")
+		result.shouldContain("deviceOS")
+		result.shouldContain("timestamp")
+		result.shouldContain("salt")
+	}
+})
