@@ -1,7 +1,7 @@
 package com.aandiclub.tech.blog.common.logging
 
-import com.fasterxml.jackson.core.type.TypeReference
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.core.type.TypeReference
+import tools.jackson.databind.ObjectMapper
 import net.logstash.logback.argument.StructuredArguments
 import org.slf4j.LoggerFactory
 import org.slf4j.event.Level
