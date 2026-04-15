@@ -20,6 +20,12 @@ springdoc:
         url: /v3/api-docs/v2
 
 app:
+  api-log:
+    env: ${APP_ENV:${spring.profiles.active:${spring.profiles.default:local}}}
+    service-name: blog
+    domain-code: 6
+    service-version: ${APP_SERVICE_VERSION:0.0.1-SNAPSHOT}
+    instance-id: ${HOSTNAME:${random.uuid}}
   auth:
     jwt:
       issuer-uri: ${APP_AUTH_JWT_ISSUER_URI:}

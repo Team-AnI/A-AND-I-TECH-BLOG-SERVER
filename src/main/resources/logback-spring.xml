@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+	<appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+		<encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+			<providers>
+				<timestamp>
+					<fieldName>@timestamp</fieldName>
+					<timeZone>UTC</timeZone>
+				</timestamp>
+				<logLevel>
+					<fieldName>level</fieldName>
+				</logLevel>
+				<message/>
+				<arguments/>
+			</providers>
+		</encoder>
+	</appender>
+
+	<root level="INFO">
+		<appender-ref ref="JSON_CONSOLE"/>
+	</root>
+</configuration>
