@@ -38,7 +38,7 @@ class ErrorHandlingTest : StringSpec({
 			.expectBody()
 			.jsonPath("$.success").isEqualTo(false)
 			.jsonPath("$.error.code").isEqualTo("NOT_FOUND")
-			.jsonPath("$.error.message").isEqualTo("post not found")
+			.jsonPath("$.error.message").isEqualTo("게시글을 찾을 수 없습니다.")
 			.jsonPath("$.timestamp").exists()
 	}
 

@@ -1,5 +1,6 @@
 package com.aandiclub.tech.blog.common.api.v2
 
+import com.aandiclub.tech.blog.common.error.ErrorMessageLocalizer
 import com.aandiclub.tech.blog.common.logging.ApiLogContext
 import com.aandiclub.tech.blog.presentation.v2.image.V2ImageController
 import com.aandiclub.tech.blog.presentation.v2.post.V2PostController
@@ -96,7 +97,7 @@ class AiV2ExceptionHandler(
 				AiV2ApiError(
 					code = descriptor.code,
 					message = descriptor.message,
-					value = value,
+					value = ErrorMessageLocalizer.localize(value),
 					alert = descriptor.alert,
 				),
 			),

@@ -21,15 +21,16 @@ class GlobalExceptionHandler {
 		exchange: ServerWebExchange,
 	): ResponseEntity<ApiResponse<Nothing>> {
 		val status = exception.statusCode
+		val localizedMessage = ErrorMessageLocalizer.localize(exception.reason ?: status.toString())
 		ApiLogContext.get(exchange)?.markFailure(
-			message = exception.reason ?: status.toString(),
+			message = localizedMessage,
 			statusCode = status.value(),
 			errorCode = resolveCode(status.value(), (status as? HttpStatus)?.name),
 		)
 		return ResponseEntity.status(status).body(
 			ApiResponse.failure(
 				code = resolveCode(status.value(), (status as? HttpStatus)?.name),
-				message = exception.reason ?: status.toString(),
+				message = localizedMessage,
 			),
 		)
 	}
@@ -42,7 +43,7 @@ class GlobalExceptionHandler {
 		val message = exception.fieldErrors
 			.takeIf { it.isNotEmpty() }
 			?.joinToString("; ") { it.asMessage() }
-			?: "validation failed"
+			?: "입력값이 올바르지 않습니다."
 		ApiLogContext.get(exchange)?.markFailure(
 			message = message,
 			statusCode = HttpStatus.BAD_REQUEST.value(),
@@ -65,7 +66,7 @@ class GlobalExceptionHandler {
 		ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
 			ApiResponse.failure(
 				code = "BAD_REQUEST",
-				message = (exception.cause?.message ?: exception.reason ?: "Failed to read HTTP message").also { message ->
+				message = ErrorMessageLocalizer.localize(exception.cause?.message ?: exception.reason ?: "bad request").also { message ->
 					ApiLogContext.get(exchange)?.markFailure(
 						message = message,
 						statusCode = HttpStatus.BAD_REQUEST.value(),
@@ -83,7 +84,7 @@ class GlobalExceptionHandler {
 		ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
 			ApiResponse.failure(
 				code = "INTERNAL_SERVER_ERROR",
-				message = (exception.message ?: "internal server error").also { message ->
+				message = ErrorMessageLocalizer.localize(exception.message ?: "internal server error").also { message ->
 					ApiLogContext.get(exchange)?.markFailure(
 						message = message,
 						statusCode = HttpStatus.INTERNAL_SERVER_ERROR.value(),
@@ -98,5 +99,5 @@ class GlobalExceptionHandler {
 		else -> statusCode.toString()
 	}
 
-	private fun FieldError.asMessage(): String = "$field: ${defaultMessage ?: "invalid value"}"
+	private fun FieldError.asMessage(): String = "$field: ${defaultMessage ?: "올바르지 않은 값입니다."}"
 }
