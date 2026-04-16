@@ -48,7 +48,7 @@ class V2PostController(
 		@Valid @RequestPart("post") request: CreatePostRequest,
 		@RequestPart("thumbnail", required = false) thumbnail: FilePart?,
 	): ResponseEntity<AiV2ApiResponse<V2PostResponse>> {
-		requestContextResolver.resolve(exchange)
+		requestContextResolver.resolveAuthenticated(exchange)
 		val uploadedThumbnailUrl = thumbnail?.let { imageUploadService.upload(it).url }
 		val created = postService.create(request.copy(thumbnailUrl = uploadedThumbnailUrl ?: request.thumbnailUrl))
 		return ResponseEntity.status(HttpStatus.CREATED).body(AiV2ApiResponse.success(created.toV2()))
@@ -59,7 +59,7 @@ class V2PostController(
 		exchange: ServerWebExchange,
 		@PathVariable postId: UUID,
 	): ResponseEntity<AiV2ApiResponse<V2PostResponse>> {
-		requestContextResolver.resolve(exchange)
+		requestContextResolver.resolvePublic(exchange)
 		return ResponseEntity.ok(AiV2ApiResponse.success(postService.get(postId).toV2()))
 	}
 
@@ -71,7 +71,7 @@ class V2PostController(
 		@RequestParam(required = false) status: PostStatus?,
 		@RequestParam(required = false) type: PostType?,
 	): ResponseEntity<AiV2ApiResponse<V2PagedPostResponse>> {
-		requestContextResolver.resolve(exchange)
+		requestContextResolver.resolvePublic(exchange)
 		return ResponseEntity.ok(AiV2ApiResponse.success(postService.list(page, size, status, type).toV2()))
 	}
 
@@ -83,9 +83,9 @@ class V2PostController(
 		@RequestParam(required = false) status: PostStatus?,
 		@RequestParam(required = false) type: PostType?,
 	): ResponseEntity<AiV2ApiResponse<V2PagedPostResponse>> {
-		val requestContext = requestContextResolver.resolve(exchange)
+		val requestContext = requestContextResolver.resolveAuthenticated(exchange)
 		return ResponseEntity.ok(
-			AiV2ApiResponse.success(postService.listMyPosts(page, size, requestContext.requesterId, status, type).toV2()),
+			AiV2ApiResponse.success(postService.listMyPosts(page, size, requestContext.requireRequesterId(), status, type).toV2()),
 		)
 	}
 
@@ -96,7 +96,7 @@ class V2PostController(
 		@RequestParam(defaultValue = "20") @Min(1) @Max(100) size: Int,
 		@RequestParam(required = false) type: PostType?,
 	): ResponseEntity<AiV2ApiResponse<V2PagedPostResponse>> {
-		requestContextResolver.resolve(exchange)
+		requestContextResolver.resolvePublic(exchange)
 		return ResponseEntity.ok(AiV2ApiResponse.success(postService.listDrafts(page, size, type).toV2()))
 	}
 
@@ -107,9 +107,9 @@ class V2PostController(
 		@RequestParam(defaultValue = "20") @Min(1) @Max(100) size: Int,
 		@RequestParam(required = false) type: PostType?,
 	): ResponseEntity<AiV2ApiResponse<V2PagedPostResponse>> {
-		val requestContext = requestContextResolver.resolve(exchange)
+		val requestContext = requestContextResolver.resolveAuthenticated(exchange)
 		return ResponseEntity.ok(
-			AiV2ApiResponse.success(postService.listMyDrafts(page, size, requestContext.requesterId, type).toV2()),
+			AiV2ApiResponse.success(postService.listMyDrafts(page, size, requestContext.requireRequesterId(), type).toV2()),
 		)
 	}
 
@@ -120,11 +120,11 @@ class V2PostController(
 		@Valid @RequestPart("post") request: PatchPostRequest,
 		@RequestPart("thumbnail", required = false) thumbnail: FilePart?,
 	): ResponseEntity<AiV2ApiResponse<V2PostResponse>> {
-		val requestContext = requestContextResolver.resolve(exchange)
+		val requestContext = requestContextResolver.resolveAuthenticated(exchange)
 		val uploadedThumbnailUrl = thumbnail?.let { imageUploadService.upload(it).url }
 		val patched = postService.patch(
 			postId,
-			requestContext.requesterId,
+			requestContext.requireRequesterId(),
 			request.copy(thumbnailUrl = uploadedThumbnailUrl ?: request.thumbnailUrl),
 		)
 		return ResponseEntity.ok(AiV2ApiResponse.success(patched.toV2()))
@@ -136,9 +136,9 @@ class V2PostController(
 		@PathVariable postId: UUID,
 		@Valid @RequestBody request: PatchPostRequest,
 	): ResponseEntity<AiV2ApiResponse<V2PostResponse>> {
-		val requestContext = requestContextResolver.resolve(exchange)
+		val requestContext = requestContextResolver.resolveAuthenticated(exchange)
 		return ResponseEntity.ok(
-			AiV2ApiResponse.success(postService.patch(postId, requestContext.requesterId, request).toV2()),
+			AiV2ApiResponse.success(postService.patch(postId, requestContext.requireRequesterId(), request).toV2()),
 		)
 	}
 
@@ -148,10 +148,10 @@ class V2PostController(
 		@PathVariable postId: UUID,
 		@Valid @RequestBody request: V2AddCollaboratorRequest,
 	): ResponseEntity<AiV2ApiResponse<V2PostResponse>> {
-		val requestContext = requestContextResolver.resolve(exchange)
+		val requestContext = requestContextResolver.resolveAuthenticated(exchange)
 		val added = postService.addCollaborator(
 			postId,
-			requestContext.requesterId,
+			requestContext.requireRequesterId(),
 			AddCollaboratorRequest(
 				ownerId = null,
 				collaborator = request.collaborator,
@@ -165,7 +165,7 @@ class V2PostController(
 		exchange: ServerWebExchange,
 		@PathVariable postId: UUID,
 	): ResponseEntity<AiV2ApiResponse<V2DeletePostResponse>> {
-		requestContextResolver.resolve(exchange)
+		requestContextResolver.resolveAuthenticated(exchange)
 		postService.delete(postId)
 		return ResponseEntity.ok(AiV2ApiResponse.success(V2DeletePostResponse(deleted = true)))
 	}

@@ -24,7 +24,7 @@ class V2ImageController(
 		exchange: ServerWebExchange,
 		@RequestPart("file") file: FilePart,
 	): ResponseEntity<AiV2ApiResponse<V2ImageUploadResponse>> {
-		requestContextResolver.resolve(exchange)
+		requestContextResolver.resolveAuthenticated(exchange)
 		return ResponseEntity.ok(AiV2ApiResponse.success(imageUploadService.upload(file).toV2()))
 	}
 }

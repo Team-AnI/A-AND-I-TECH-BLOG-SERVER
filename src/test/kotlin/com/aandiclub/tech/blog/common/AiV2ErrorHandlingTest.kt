@@ -37,14 +37,11 @@ class AiV2ErrorHandlingTest : StringSpec({
 	}
 
 	"v2 should map not found into A&I error envelope" {
-		val authenticate = "Bearer v2-token"
-		coEvery { authTokenService.extractUserId(eq(authenticate)) } returns "u-v2-1"
 		coEvery { postService.get(any()) } throws ResponseStatusException(HttpStatus.NOT_FOUND, "post not found")
 
 		client.get()
 			.uri("/v2/posts/${java.util.UUID.randomUUID()}")
 			.header("deviceOS", "IOS")
-			.header("Authenticate", authenticate)
 			.header("timestamp", "2026-04-09T12:00:00Z")
 			.exchange()
 			.expectStatus().isNotFound
@@ -59,7 +56,6 @@ class AiV2ErrorHandlingTest : StringSpec({
 		client.get()
 			.uri("/v2/posts/${java.util.UUID.randomUUID()}")
 			.header("deviceOS", "AOS")
-			.header("Authenticate", "Bearer invalid")
 			.header("timestamp", "not-an-instant")
 			.exchange()
 			.expectStatus().isBadRequest
@@ -67,5 +63,18 @@ class AiV2ErrorHandlingTest : StringSpec({
 			.jsonPath("$.success").isEqualTo(false)
 			.jsonPath("$.error.code").isEqualTo(90303)
 			.jsonPath("$.error.value").isEqualTo("not-an-instant")
+	}
+
+	"v2 protected endpoint should reject request without Authenticate header" {
+		client.get()
+			.uri("/v2/posts/me")
+			.header("deviceOS", "IOS")
+			.header("timestamp", "2026-04-09T12:00:00Z")
+			.exchange()
+			.expectStatus().isUnauthorized
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(false)
+			.jsonPath("$.error.code").isEqualTo(90101)
+			.jsonPath("$.error.message").isEqualTo("Authenticate header is required")
 	}
 })

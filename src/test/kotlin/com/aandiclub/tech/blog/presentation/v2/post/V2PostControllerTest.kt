@@ -32,12 +32,15 @@ class V2PostControllerTest : StringSpec({
 
 	fun <S : WebTestClient.RequestHeadersSpec<S>> S.withV2Headers(): S =
 		header("deviceOS", "IOS")
+			.header("timestamp", "2026-04-09T12:00:00Z")
+
+	fun <S : WebTestClient.RequestHeadersSpec<S>> S.withAuthenticatedV2Headers(): S =
+		header("deviceOS", "IOS")
 			.header("Authenticate", authenticate)
 			.header("timestamp", "2026-04-09T12:00:00Z")
 
 	"GET /v2/posts should return wrapped v2 paged response" {
 		val now = Instant.parse("2026-02-15T12:00:00Z")
-		coEvery { authTokenService.extractUserId(eq(authenticate)) } returns "u-v2-list"
 		coEvery { service.list(0, 20, null, null) } returns
 			PagedPostResponse(
 				items = listOf(
@@ -77,6 +80,36 @@ class V2PostControllerTest : StringSpec({
 			.jsonPath("$.data.items[0].status").isEqualTo("Published")
 	}
 
+	"GET /v2/posts/{id} should allow public access without Authenticate header" {
+		val postId = UUID.randomUUID()
+		val now = Instant.parse("2026-02-15T12:00:00Z")
+		coEvery { service.get(eq(postId)) } returns
+			PostResponse(
+				id = postId,
+				title = "public-post",
+				contentMarkdown = "public-content",
+				author = PostAuthorResponse(
+					id = "public-author",
+					nickname = "neo",
+					profileImageUrl = null,
+				),
+				type = PostType.Blog,
+				status = PostStatus.Published,
+				createdAt = now,
+				updatedAt = now,
+			)
+
+		webTestClient.get()
+			.uri("/v2/posts/$postId")
+			.withV2Headers()
+			.exchange()
+			.expectStatus().isOk
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(true)
+			.jsonPath("$.data.id").isEqualTo(postId.toString())
+			.jsonPath("$.data.author.id").isEqualTo("public-author")
+	}
+
 	"PATCH /v2/posts/{id} should use Authenticate header requester and return v2 envelope" {
 		val postId = UUID.randomUUID()
 		val requesterId = "u-v2-patch"
@@ -100,7 +133,7 @@ class V2PostControllerTest : StringSpec({
 
 		webTestClient.patch()
 			.uri("/v2/posts/$postId")
-			.withV2Headers()
+			.withAuthenticatedV2Headers()
 			.contentType(MediaType.APPLICATION_JSON)
 			.bodyValue(
 				PatchPostRequest(
@@ -150,7 +183,7 @@ class V2PostControllerTest : StringSpec({
 
 		webTestClient.post()
 			.uri("/v2/posts/$postId/collaborators")
-			.withV2Headers()
+			.withAuthenticatedV2Headers()
 			.contentType(MediaType.APPLICATION_JSON)
 			.bodyValue(
 				"""
