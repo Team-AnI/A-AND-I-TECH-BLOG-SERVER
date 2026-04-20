@@ -13,13 +13,20 @@ import com.aandiclub.tech.blog.presentation.v2.post.dto.V2AddCollaboratorRequest
 import com.aandiclub.tech.blog.presentation.v2.post.dto.V2DeletePostResponse
 import com.aandiclub.tech.blog.presentation.v2.post.dto.V2PagedPostResponse
 import com.aandiclub.tech.blog.presentation.v2.post.dto.V2PostResponse
+import com.fasterxml.jackson.core.JsonProcessingException
+import com.fasterxml.jackson.databind.ObjectMapper
 import jakarta.validation.Valid
+import jakarta.validation.Validator
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
+import kotlinx.coroutines.reactor.awaitSingle
+import org.springframework.core.io.buffer.DataBufferUtils
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.http.codec.multipart.FilePart
+import org.springframework.http.codec.multipart.FormFieldPart
+import org.springframework.http.codec.multipart.Part
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
@@ -32,6 +39,8 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RequestPart
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ServerWebExchange
+import org.springframework.web.server.ServerWebInputException
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 
 @Validated
@@ -41,13 +50,17 @@ class V2PostController(
 	private val postService: PostService,
 	private val imageUploadService: ImageUploadService,
 	private val requestContextResolver: AiV2RequestContextResolver,
+	private val objectMapper: ObjectMapper,
+	private val validator: Validator,
 ) {
 	@PostMapping(consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
 	suspend fun create(
 		exchange: ServerWebExchange,
-		@Valid @RequestPart("post") request: CreatePostRequest,
+		@RequestPart("post") postPart: Part,
 		@RequestPart("thumbnail", required = false) thumbnail: FilePart?,
 	): ResponseEntity<AiV2ApiResponse<V2PostResponse>> {
+		val request = parseCreateRequest(postPart)
+		validateCreateRequest(request)
 		requestContextResolver.resolveAuthenticated(exchange)
 		val uploadedThumbnailUrl = thumbnail?.let { imageUploadService.upload(it).url }
 		val created = postService.create(request.copy(thumbnailUrl = uploadedThumbnailUrl ?: request.thumbnailUrl))
@@ -168,5 +181,39 @@ class V2PostController(
 		requestContextResolver.resolveAuthenticated(exchange)
 		postService.delete(postId)
 		return ResponseEntity.ok(AiV2ApiResponse.success(V2DeletePostResponse(deleted = true)))
+	}
+
+	private suspend fun parseCreateRequest(postPart: Part): CreatePostRequest {
+		val payload = when (postPart) {
+			is FormFieldPart -> postPart.value()
+			else -> {
+				val joined = DataBufferUtils.join(postPart.content()).awaitSingle()
+				try {
+					val bytes = ByteArray(joined.readableByteCount())
+					joined.read(bytes)
+					String(bytes, StandardCharsets.UTF_8)
+				} finally {
+					DataBufferUtils.release(joined)
+				}
+			}
+		}
+
+		return try {
+			objectMapper.readValue(payload, CreatePostRequest::class.java)
+		} catch (exception: JsonProcessingException) {
+			throw ServerWebInputException("Invalid post part", null, exception)
+		}
+	}
+
+	private fun validateCreateRequest(request: CreatePostRequest) {
+		val violations = validator.validate(request)
+		if (violations.isEmpty()) {
+			return
+		}
+
+		val message = violations
+			.sortedBy { it.propertyPath.toString() }
+			.joinToString("; ") { "${it.propertyPath}: ${it.message}" }
+		throw IllegalArgumentException(message)
 	}
 }

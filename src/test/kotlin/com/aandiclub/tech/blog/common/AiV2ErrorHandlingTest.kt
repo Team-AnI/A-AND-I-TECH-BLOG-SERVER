@@ -7,9 +7,11 @@ import com.aandiclub.tech.blog.common.auth.AuthTokenService
 import com.aandiclub.tech.blog.presentation.image.ImageUploadService
 import com.aandiclub.tech.blog.presentation.post.service.PostService
 import com.aandiclub.tech.blog.presentation.v2.post.V2PostController
+import com.fasterxml.jackson.databind.ObjectMapper
 import io.kotest.core.spec.style.StringSpec
 import io.mockk.coEvery
 import io.mockk.mockk
+import jakarta.validation.Validation
 import org.springframework.http.HttpStatus
 import org.springframework.test.web.reactive.server.WebTestClient
 import org.springframework.web.server.ResponseStatusException
@@ -19,7 +21,9 @@ class AiV2ErrorHandlingTest : StringSpec({
 	val imageUploadService = mockk<ImageUploadService>()
 	val authTokenService = mockk<AuthTokenService>()
 	val headerResolver = AiV2RequestContextResolver(authTokenService)
-	val client = WebTestClient.bindToController(V2PostController(postService, imageUploadService, headerResolver))
+	val objectMapper = ObjectMapper().findAndRegisterModules()
+	val validator = Validation.buildDefaultValidatorFactory().validator
+	val client = WebTestClient.bindToController(V2PostController(postService, imageUploadService, headerResolver, objectMapper, validator))
 		.controllerAdvice(AiV2ExceptionHandler(AiV2ErrorMapper()))
 		.build()
 
