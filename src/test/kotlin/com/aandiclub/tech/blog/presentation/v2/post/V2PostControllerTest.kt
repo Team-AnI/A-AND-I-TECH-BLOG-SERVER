@@ -12,7 +12,9 @@ import com.aandiclub.tech.blog.presentation.post.dto.PatchPostRequest
 import com.aandiclub.tech.blog.presentation.post.dto.PostAuthorResponse
 import com.aandiclub.tech.blog.presentation.post.dto.PostResponse
 import com.aandiclub.tech.blog.presentation.post.service.PostService
+import io.swagger.v3.oas.annotations.Operation
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.mockk
 import org.springframework.http.MediaType
@@ -167,5 +169,15 @@ class V2PostControllerTest : StringSpec({
 			.expectBody()
 			.jsonPath("$.success").isEqualTo(true)
 			.jsonPath("$.data.collaborators[0].id").isEqualTo(collaboratorId)
+	}
+
+	"legacy v2 /posts read endpoints should be marked deprecated" {
+		val methods = V2PostController::class.java.declaredMethods.associateBy { it.name }
+
+		listOf("get", "list", "listMyPosts", "listDrafts", "listMyDrafts").forEach { methodName ->
+			val method = methods.getValue(methodName)
+			method.isAnnotationPresent(Deprecated::class.java) shouldBe true
+			method.getAnnotation(Operation::class.java)?.deprecated shouldBe true
+		}
 	}
 })
