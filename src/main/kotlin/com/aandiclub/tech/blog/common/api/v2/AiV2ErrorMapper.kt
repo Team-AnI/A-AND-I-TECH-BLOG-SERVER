@@ -11,7 +11,7 @@ class AiV2ErrorMapper {
 		val reason = exception.reason?.trim().orEmpty()
 
 		return when {
-			status == HttpStatus.NOT_FOUND && reason.startsWith("post not found") -> AiV2ErrorCatalog.postNotFound
+			status == HttpStatus.NOT_FOUND -> AiV2ErrorCatalog.postNotFound
 			status == HttpStatus.BAD_REQUEST && reason == "draft posts are only available in draft list" -> AiV2ErrorCatalog.draftListOnly
 			status == HttpStatus.FORBIDDEN && reason == "only post owner or collaborator can edit" -> AiV2ErrorCatalog.postEditForbidden
 			status == HttpStatus.FORBIDDEN && reason == "only post owner can modify collaborators" -> AiV2ErrorCatalog.collaboratorEditForbidden
