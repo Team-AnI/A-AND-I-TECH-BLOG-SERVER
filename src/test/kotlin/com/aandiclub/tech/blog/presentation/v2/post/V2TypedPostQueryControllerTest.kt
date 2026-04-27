@@ -129,4 +129,48 @@ class V2TypedPostQueryControllerTest : StringSpec({
 			.jsonPath("$.success").isEqualTo(true)
 			.jsonPath("$.data.totalElements").isEqualTo(0)
 	}
+
+	"GET /v2/blogs/scheduled/me should use requester and fixed blog type" {
+		val requesterId = "u-v2-blog-scheduled"
+		coEvery { authTokenService.extractUserId(eq(authenticate)) } returns requesterId
+		coEvery { service.listMyScheduledPosts(0, 20, requesterId, PostType.Blog) } returns
+			PagedPostResponse(
+				items = emptyList(),
+				page = 0,
+				size = 20,
+				totalElements = 0,
+				totalPages = 0,
+			)
+
+		webTestClient.get()
+			.uri("/v2/blogs/scheduled/me?page=0&size=20")
+			.withV2Headers()
+			.exchange()
+			.expectStatus().isOk
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(true)
+			.jsonPath("$.data.totalElements").isEqualTo(0)
+	}
+
+	"GET /v2/lectures/scheduled/me should use requester and fixed lecture type" {
+		val requesterId = "u-v2-lecture-scheduled"
+		coEvery { authTokenService.extractUserId(eq(authenticate)) } returns requesterId
+		coEvery { service.listMyScheduledPosts(0, 20, requesterId, PostType.Lecture) } returns
+			PagedPostResponse(
+				items = emptyList(),
+				page = 0,
+				size = 20,
+				totalElements = 0,
+				totalPages = 0,
+			)
+
+		webTestClient.get()
+			.uri("/v2/lectures/scheduled/me?page=0&size=20")
+			.withV2Headers()
+			.exchange()
+			.expectStatus().isOk
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(true)
+			.jsonPath("$.data.totalElements").isEqualTo(0)
+	}
 })

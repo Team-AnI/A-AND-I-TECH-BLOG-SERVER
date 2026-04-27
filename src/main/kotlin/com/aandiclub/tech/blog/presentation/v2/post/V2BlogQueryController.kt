@@ -77,6 +77,18 @@ class V2BlogQueryController(
 		)
 	}
 
+	@GetMapping("/scheduled/me")
+	suspend fun listMyScheduledPosts(
+		exchange: ServerWebExchange,
+		@RequestParam(defaultValue = "0") @Min(0) page: Int,
+		@RequestParam(defaultValue = "20") @Min(1) @Max(100) size: Int,
+	): ResponseEntity<AiV2ApiResponse<V2PagedPostResponse>> {
+		val requestContext = requestContextResolver.resolve(exchange)
+		return ResponseEntity.ok(
+			AiV2ApiResponse.success(postService.listMyScheduledPosts(page, size, requestContext.requesterId, PostType.Blog).toV2()),
+		)
+	}
+
 	private fun requireBlog(post: com.aandiclub.tech.blog.presentation.post.dto.PostResponse): com.aandiclub.tech.blog.presentation.post.dto.PostResponse {
 		if (post.type != PostType.Blog) {
 			throw ResponseStatusException(HttpStatus.NOT_FOUND, "blog post not found")
