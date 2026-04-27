@@ -13,14 +13,19 @@ class AiV2ErrorMapper {
 		return when {
 			status == HttpStatus.NOT_FOUND -> AiV2ErrorCatalog.postNotFound
 			status == HttpStatus.BAD_REQUEST && reason == "draft posts are only available in draft list" -> AiV2ErrorCatalog.draftListOnly
+			status == HttpStatus.BAD_REQUEST && reason == "scheduled posts are only available in my scheduled list" -> AiV2ErrorCatalog.scheduledListOnly
 			status == HttpStatus.FORBIDDEN && reason == "only post owner or collaborator can edit" -> AiV2ErrorCatalog.postEditForbidden
 			status == HttpStatus.FORBIDDEN && reason == "only post owner can modify collaborators" -> AiV2ErrorCatalog.collaboratorEditForbidden
 			status == HttpStatus.FORBIDDEN && reason == "only post owner can add collaborators" -> AiV2ErrorCatalog.addCollaboratorForbidden
 			status == HttpStatus.BAD_REQUEST && reason == "primary author cannot be changed" -> AiV2ErrorCatalog.primaryAuthorImmutable
 			status == HttpStatus.BAD_REQUEST && reason == "title is required" -> AiV2ErrorCatalog.titleRequired
 			status == HttpStatus.BAD_REQUEST && reason == "contentMarkdown is required for published post" -> AiV2ErrorCatalog.contentRequiredForPublished
+			status == HttpStatus.BAD_REQUEST && reason == "contentMarkdown is required for scheduled post" -> AiV2ErrorCatalog.contentRequiredForScheduled
 			status == HttpStatus.BAD_REQUEST && reason == "owner is already the primary author" -> AiV2ErrorCatalog.ownerAlreadyPrimaryAuthor
 			status == HttpStatus.BAD_REQUEST && reason == "collaborator nickname is required for new user" -> AiV2ErrorCatalog.collaboratorNicknameRequired
+			status == HttpStatus.BAD_REQUEST && reason == "scheduledPublishAt is required for scheduled post" -> AiV2ErrorCatalog.scheduledPublishAtRequired
+			status == HttpStatus.BAD_REQUEST && reason == "scheduledPublishAt must be in the future" -> AiV2ErrorCatalog.scheduledPublishAtFuture
+			status == HttpStatus.BAD_REQUEST && reason == "scheduledPublishAt is only allowed for scheduled post" -> AiV2ErrorCatalog.scheduledPublishAtOnlyForScheduled
 			status == HttpStatus.UNAUTHORIZED -> AiV2ErrorCatalog.invalidAuthenticate
 			status == HttpStatus.BAD_GATEWAY -> AiV2ErrorCatalog.s3UploadFailed
 			status == HttpStatus.SERVICE_UNAVAILABLE -> AiV2ErrorCatalog.externalSystemUnavailable

@@ -235,4 +235,56 @@ class PostServiceImplTest : StringSpec({
 
 		response.type shouldBe PostType.Lecture
 	}
+
+	"patch should reject scheduled status without scheduledPublishAt" {
+		val postRepository = mockk<PostRepository>()
+		val postCollaboratorRepository = mockk<PostCollaboratorRepository>()
+		val userRepository = mockk<UserRepository>()
+		val entityOperations = mockk<R2dbcEntityOperations>(relaxed = true)
+		val service = PostServiceImpl(postRepository, postCollaboratorRepository, userRepository, entityOperations)
+
+		val postId = UUID.randomUUID()
+		val ownerId = "u-owner-6"
+		val now = Instant.parse("2026-02-15T12:00:00Z")
+		val current = Post(
+			id = postId,
+			title = "draft title",
+			contentMarkdown = "draft content",
+			authorId = ownerId,
+			status = PostStatus.Draft,
+			createdAt = now,
+			updatedAt = now,
+		)
+
+		coEvery { postRepository.findByIdAndStatusNot(postId, PostStatus.Deleted) } returns current
+
+		val exception = shouldThrow<ResponseStatusException> {
+			service.patch(
+				postId = postId,
+				requesterId = ownerId,
+				request = PatchPostRequest(
+					status = PostStatus.Scheduled,
+				),
+			)
+		}
+
+		exception.statusCode shouldBe HttpStatus.BAD_REQUEST
+		exception.reason shouldBe "scheduledPublishAt is required for scheduled post"
+		coVerify(exactly = 0) { postRepository.save(any()) }
+	}
+
+	"list should reject scheduled status in public listing" {
+		val postRepository = mockk<PostRepository>()
+		val postCollaboratorRepository = mockk<PostCollaboratorRepository>()
+		val userRepository = mockk<UserRepository>()
+		val entityOperations = mockk<R2dbcEntityOperations>(relaxed = true)
+		val service = PostServiceImpl(postRepository, postCollaboratorRepository, userRepository, entityOperations)
+
+		val exception = shouldThrow<ResponseStatusException> {
+			service.list(page = 0, size = 20, status = PostStatus.Scheduled, type = PostType.Blog)
+		}
+
+		exception.statusCode shouldBe HttpStatus.BAD_REQUEST
+		exception.reason shouldBe "scheduled posts are only available in my scheduled list"
+	}
 })

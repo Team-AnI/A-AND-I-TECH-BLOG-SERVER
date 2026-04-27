@@ -22,6 +22,10 @@ data class Post(
 	@Column("type")
 	val type: PostType = PostType.Blog,
 	val status: PostStatus = PostStatus.Draft,
+	@Column("scheduled_publish_at")
+	val scheduledPublishAt: Instant? = null,
+	@Column("published_at")
+	val publishedAt: Instant? = null,
 	@Column("created_at")
 	val createdAt: Instant = Instant.now(),
 	@Column("updated_at")
@@ -33,6 +37,13 @@ data class Post(
 		require(summary.length <= 300) { "summary must be less than or equal to 300 characters" }
 		if (status == PostStatus.Published) {
 			require(contentMarkdown.isNotBlank()) { "contentMarkdown must not be blank when published" }
+		}
+		if (status == PostStatus.Scheduled) {
+			require(contentMarkdown.isNotBlank()) { "contentMarkdown must not be blank when scheduled" }
+			requireNotNull(scheduledPublishAt) { "scheduledPublishAt must not be null when scheduled" }
+		}
+		if (status != PostStatus.Scheduled) {
+			require(scheduledPublishAt == null) { "scheduledPublishAt must be null unless status is scheduled" }
 		}
 	}
 }

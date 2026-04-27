@@ -124,6 +124,21 @@ class V2PostController(
 		)
 	}
 
+	@GetMapping("/scheduled/me")
+	@Deprecated("Use /v2/blogs/scheduled/me or /v2/lectures/scheduled/me")
+	@Operation(summary = "List my scheduled posts", deprecated = true)
+	suspend fun listMyScheduledPosts(
+		exchange: ServerWebExchange,
+		@RequestParam(defaultValue = "0") @Min(0) page: Int,
+		@RequestParam(defaultValue = "20") @Min(1) @Max(100) size: Int,
+		@RequestParam(required = false) type: PostType?,
+	): ResponseEntity<AiV2ApiResponse<V2PagedPostResponse>> {
+		val requestContext = requestContextResolver.resolve(exchange)
+		return ResponseEntity.ok(
+			AiV2ApiResponse.success(postService.listMyScheduledPosts(page, size, requestContext.requesterId, type).toV2()),
+		)
+	}
+
 	@PatchMapping("/{postId}", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
 	suspend fun patchMultipart(
 		exchange: ServerWebExchange,

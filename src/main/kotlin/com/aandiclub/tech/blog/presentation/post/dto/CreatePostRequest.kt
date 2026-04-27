@@ -8,6 +8,7 @@ import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Size
+import java.time.Instant
 
 @JsonDeserialize(using = CreatePostRequestDeserializer::class)
 data class CreatePostRequest(
@@ -28,4 +29,5 @@ data class CreatePostRequest(
 	val collaborators: List<PostAuthorRequest>? = null,
 	val type: PostType? = null,
 	val status: PostStatus = PostStatus.Published,
+	val scheduledPublishAt: Instant? = null,
 )

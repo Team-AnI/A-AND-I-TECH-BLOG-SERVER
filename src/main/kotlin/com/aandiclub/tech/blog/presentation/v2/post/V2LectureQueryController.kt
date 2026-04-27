@@ -83,6 +83,18 @@ class V2LectureQueryController(
 		)
 	}
 
+	@GetMapping("/scheduled/me")
+	suspend fun listMyScheduledPosts(
+		exchange: ServerWebExchange,
+		@RequestParam(defaultValue = "0") @Min(0) page: Int,
+		@RequestParam(defaultValue = "20") @Min(1) @Max(100) size: Int,
+	): ResponseEntity<AiV2ApiResponse<V2PagedPostResponse>> {
+		val requestContext = requestContextResolver.resolve(exchange)
+		return ResponseEntity.ok(
+			AiV2ApiResponse.success(postService.listMyScheduledPosts(page, size, requestContext.requesterId, PostType.Lecture).toV2()),
+		)
+	}
+
 	private fun requireLecture(post: com.aandiclub.tech.blog.presentation.post.dto.PostResponse): com.aandiclub.tech.blog.presentation.post.dto.PostResponse {
 		if (post.type != PostType.Lecture) {
 			throw ResponseStatusException(HttpStatus.NOT_FOUND, "lecture post not found")

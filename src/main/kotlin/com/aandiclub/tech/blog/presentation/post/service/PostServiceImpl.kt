@@ -36,7 +36,8 @@ class PostServiceImpl(
 ) : PostService {
 
 	override suspend fun create(request: CreatePostRequest): PostResponse {
-		validatePostByStatus(request.title, request.contentMarkdown, request.status)
+		val now = Instant.now()
+		validatePostByStatus(request.title, request.contentMarkdown, request.status, request.scheduledPublishAt, now)
 		val upsertedAuthor = upsertAuthorFromRequest(request.author)
 		val post = Post(
 			title = request.title,
@@ -46,6 +47,8 @@ class PostServiceImpl(
 			authorId = request.author.id,
 			type = request.type ?: PostType.Blog,
 			status = request.status,
+			scheduledPublishAt = request.scheduledPublishAt.takeIf { request.status == PostStatus.Scheduled },
+			publishedAt = now.takeIf { request.status == PostStatus.Published },
 		)
 		val saved = entityOperations.insert(post).awaitSingle()
 		mergeCollaborators(saved.id, saved.authorId, request.collaborators.orEmpty())
@@ -57,13 +60,16 @@ class PostServiceImpl(
 	}
 
 	override suspend fun get(postId: UUID): PostResponse {
-		val post = postRepository.findByIdAndStatusNot(postId, PostStatus.Deleted) ?: throw notFound(postId)
+		val post = postRepository.findByIdAndStatus(postId, PostStatus.Published) ?: throw notFound(postId)
 		return buildPostResponse(post)
 	}
 
 	override suspend fun list(page: Int, size: Int, status: PostStatus?, type: PostType?): PagedPostResponse {
 		if (status == PostStatus.Draft) {
 			throw ResponseStatusException(HttpStatus.BAD_REQUEST, "draft posts are only available in draft list")
+		}
+		if (status == PostStatus.Scheduled) {
+			throw ResponseStatusException(HttpStatus.BAD_REQUEST, "scheduled posts are only available in my scheduled list")
 		}
 		return listByStatus(page, size, status ?: PostStatus.Published, type ?: PostType.Blog)
 	}
@@ -82,6 +88,11 @@ class PostServiceImpl(
 	override suspend fun listMyDrafts(page: Int, size: Int, requesterId: String, type: PostType?): PagedPostResponse {
 		val actorId = normalizeRequesterId(requesterId)
 		return listByStatusAndUser(page, size, PostStatus.Draft, type ?: PostType.Blog, actorId)
+	}
+
+	override suspend fun listMyScheduledPosts(page: Int, size: Int, requesterId: String, type: PostType?): PagedPostResponse {
+		val actorId = normalizeRequesterId(requesterId)
+		return listByStatusAndUser(page, size, PostStatus.Scheduled, type ?: PostType.Blog, actorId)
 	}
 
 	private suspend fun listByStatus(page: Int, size: Int, status: PostStatus, type: PostType): PagedPostResponse {
@@ -145,12 +156,17 @@ class PostServiceImpl(
 			throw ResponseStatusException(HttpStatus.BAD_REQUEST, "primary author cannot be changed")
 		}
 		val upsertedAuthor = request.author?.let { upsertAuthorFromRequest(it) }
+		val now = Instant.now()
 		val nextTitle = request.title ?: current.title
 		val nextSummary = request.summary ?: ""
 		val nextContentMarkdown = request.contentMarkdown ?: current.contentMarkdown
 		val nextType = request.type ?: current.type
 		val nextStatus = request.status ?: current.status
-		validatePostByStatus(nextTitle, nextContentMarkdown, nextStatus)
+		val nextScheduledPublishAt = when (nextStatus) {
+			PostStatus.Scheduled -> request.scheduledPublishAt ?: current.scheduledPublishAt
+			else -> null
+		}
+		validatePostByStatus(nextTitle, nextContentMarkdown, nextStatus, nextScheduledPublishAt, now)
 		val updated = current.copy(
 			title = nextTitle,
 			summary = nextSummary,
@@ -159,7 +175,12 @@ class PostServiceImpl(
 			authorId = current.authorId,
 			type = nextType,
 			status = nextStatus,
-			updatedAt = Instant.now(),
+			scheduledPublishAt = nextScheduledPublishAt,
+			publishedAt = when (nextStatus) {
+				PostStatus.Published -> current.publishedAt ?: now
+				else -> current.publishedAt
+			},
+			updatedAt = now,
 		)
 		val saved = postRepository.save(updated)
 		if (request.collaborators != null && actorId == current.authorId) {
@@ -208,12 +229,30 @@ class PostServiceImpl(
 		return actorId
 	}
 
-	private fun validatePostByStatus(title: String, contentMarkdown: String, status: PostStatus) {
+	private fun validatePostByStatus(
+		title: String,
+		contentMarkdown: String,
+		status: PostStatus,
+		scheduledPublishAt: Instant?,
+		now: Instant,
+	) {
 		if (title.isBlank()) {
 			throw ResponseStatusException(HttpStatus.BAD_REQUEST, "title is required")
 		}
 		if (status == PostStatus.Published && contentMarkdown.isBlank()) {
 			throw ResponseStatusException(HttpStatus.BAD_REQUEST, "contentMarkdown is required for published post")
+		}
+		if (status == PostStatus.Scheduled && contentMarkdown.isBlank()) {
+			throw ResponseStatusException(HttpStatus.BAD_REQUEST, "contentMarkdown is required for scheduled post")
+		}
+		if (status == PostStatus.Scheduled && scheduledPublishAt == null) {
+			throw ResponseStatusException(HttpStatus.BAD_REQUEST, "scheduledPublishAt is required for scheduled post")
+		}
+		if (status == PostStatus.Scheduled && scheduledPublishAt != null && !scheduledPublishAt.isAfter(now)) {
+			throw ResponseStatusException(HttpStatus.BAD_REQUEST, "scheduledPublishAt must be in the future")
+		}
+		if (status != PostStatus.Scheduled && scheduledPublishAt != null) {
+			throw ResponseStatusException(HttpStatus.BAD_REQUEST, "scheduledPublishAt is only allowed for scheduled post")
 		}
 	}
 
@@ -389,6 +428,8 @@ class PostServiceImpl(
 		collaborators = collaborators,
 		type = type,
 		status = status,
+		scheduledPublishAt = scheduledPublishAt,
+		publishedAt = publishedAt,
 		createdAt = createdAt,
 		updatedAt = updatedAt,
 	)

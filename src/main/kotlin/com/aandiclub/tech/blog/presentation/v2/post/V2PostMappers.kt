@@ -18,6 +18,8 @@ internal fun PostResponse.toV2(): V2PostResponse =
 		collaborators = collaborators.map { it.toV2() },
 		type = type,
 		status = status,
+		scheduledPublishAt = scheduledPublishAt,
+		publishedAt = publishedAt,
 		createdAt = createdAt,
 		updatedAt = updatedAt,
 	)
