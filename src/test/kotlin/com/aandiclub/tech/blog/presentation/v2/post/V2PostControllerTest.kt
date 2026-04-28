@@ -235,7 +235,7 @@ class V2PostControllerTest : StringSpec({
 
 		webTestClient.get()
 			.uri("/v2/posts/scheduled/me?page=0&size=20")
-			.withV2Headers()
+			.withAuthenticatedV2Headers()
 			.exchange()
 			.expectStatus().isOk
 			.expectBody()

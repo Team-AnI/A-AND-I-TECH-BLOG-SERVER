@@ -30,17 +30,23 @@ class V2BlogQueryController(
 ) {
 	@GetMapping("/{postId}")
 	suspend fun get(
+		exchange: ServerWebExchange,
 		@PathVariable postId: UUID,
-	): ResponseEntity<AiV2ApiResponse<V2PostResponse>> =
-		ResponseEntity.ok(AiV2ApiResponse.success(requireBlog(postService.get(postId)).toV2()))
+	): ResponseEntity<AiV2ApiResponse<V2PostResponse>> {
+		requestContextResolver.resolvePublic(exchange)
+		return ResponseEntity.ok(AiV2ApiResponse.success(requireBlog(postService.get(postId)).toV2()))
+	}
 
 	@GetMapping
 	suspend fun list(
+		exchange: ServerWebExchange,
 		@RequestParam(defaultValue = "0") @Min(0) page: Int,
 		@RequestParam(defaultValue = "20") @Min(1) @Max(100) size: Int,
 		@RequestParam(required = false) status: PostStatus?,
-	): ResponseEntity<AiV2ApiResponse<V2PagedPostResponse>> =
-		ResponseEntity.ok(AiV2ApiResponse.success(postService.list(page, size, status, PostType.Blog).toV2()))
+	): ResponseEntity<AiV2ApiResponse<V2PagedPostResponse>> {
+		requestContextResolver.resolvePublic(exchange)
+		return ResponseEntity.ok(AiV2ApiResponse.success(postService.list(page, size, status, PostType.Blog).toV2()))
+	}
 
 	@GetMapping("/me")
 	suspend fun listMyBlogs(
@@ -49,9 +55,9 @@ class V2BlogQueryController(
 		@RequestParam(defaultValue = "20") @Min(1) @Max(100) size: Int,
 		@RequestParam(required = false) status: PostStatus?,
 	): ResponseEntity<AiV2ApiResponse<V2PagedPostResponse>> {
-		val requestContext = requestContextResolver.resolve(exchange)
+		val requestContext = requestContextResolver.resolveAuthenticated(exchange)
 		return ResponseEntity.ok(
-			AiV2ApiResponse.success(postService.listMyPosts(page, size, requestContext.requesterId, status, PostType.Blog).toV2()),
+			AiV2ApiResponse.success(postService.listMyPosts(page, size, requestContext.requireRequesterId(), status, PostType.Blog).toV2()),
 		)
 	}
 
@@ -61,7 +67,7 @@ class V2BlogQueryController(
 		@RequestParam(defaultValue = "0") @Min(0) page: Int,
 		@RequestParam(defaultValue = "20") @Min(1) @Max(100) size: Int,
 	): ResponseEntity<AiV2ApiResponse<V2PagedPostResponse>> {
-		requestContextResolver.resolve(exchange)
+		requestContextResolver.resolvePublic(exchange)
 		return ResponseEntity.ok(AiV2ApiResponse.success(postService.listDrafts(page, size, PostType.Blog).toV2()))
 	}
 
@@ -71,9 +77,9 @@ class V2BlogQueryController(
 		@RequestParam(defaultValue = "0") @Min(0) page: Int,
 		@RequestParam(defaultValue = "20") @Min(1) @Max(100) size: Int,
 	): ResponseEntity<AiV2ApiResponse<V2PagedPostResponse>> {
-		val requestContext = requestContextResolver.resolve(exchange)
+		val requestContext = requestContextResolver.resolveAuthenticated(exchange)
 		return ResponseEntity.ok(
-			AiV2ApiResponse.success(postService.listMyDrafts(page, size, requestContext.requesterId, PostType.Blog).toV2()),
+			AiV2ApiResponse.success(postService.listMyDrafts(page, size, requestContext.requireRequesterId(), PostType.Blog).toV2()),
 		)
 	}
 
@@ -83,9 +89,9 @@ class V2BlogQueryController(
 		@RequestParam(defaultValue = "0") @Min(0) page: Int,
 		@RequestParam(defaultValue = "20") @Min(1) @Max(100) size: Int,
 	): ResponseEntity<AiV2ApiResponse<V2PagedPostResponse>> {
-		val requestContext = requestContextResolver.resolve(exchange)
+		val requestContext = requestContextResolver.resolveAuthenticated(exchange)
 		return ResponseEntity.ok(
-			AiV2ApiResponse.success(postService.listMyScheduledPosts(page, size, requestContext.requesterId, PostType.Blog).toV2()),
+			AiV2ApiResponse.success(postService.listMyScheduledPosts(page, size, requestContext.requireRequesterId(), PostType.Blog).toV2()),
 		)
 	}
 

@@ -29,10 +29,13 @@ class V2TypedPostQueryControllerTest : StringSpec({
 		.build()
 	val authenticate = "Bearer v2-typed-query-token"
 
-	fun <S : WebTestClient.RequestHeadersSpec<S>> S.withV2Headers(): S =
+	fun <S : WebTestClient.RequestHeadersSpec<S>> S.withPublicV2Headers(): S =
 		header("deviceOS", "IOS")
-			.header("Authenticate", authenticate)
 			.header("timestamp", "2026-04-09T12:00:00Z")
+
+	fun <S : WebTestClient.RequestHeadersSpec<S>> S.withAuthenticatedV2Headers(): S =
+		withPublicV2Headers()
+			.header("Authenticate", authenticate)
 
 	"GET /v2/blogs should be public and fix type to Blog" {
 		val now = Instant.parse("2026-02-15T12:00:00Z")
@@ -62,6 +65,7 @@ class V2TypedPostQueryControllerTest : StringSpec({
 
 		webTestClient.get()
 			.uri("/v2/blogs?page=0&size=20")
+			.withPublicV2Headers()
 			.exchange()
 			.expectStatus().isOk
 			.expectBody()
@@ -101,7 +105,7 @@ class V2TypedPostQueryControllerTest : StringSpec({
 
 		webTestClient.get()
 			.uri("/v2/lectures/$postId")
-			.withV2Headers()
+			.withAuthenticatedV2Headers()
 			.exchange()
 			.expectStatus().isNotFound
 			.expectBody()
@@ -122,7 +126,7 @@ class V2TypedPostQueryControllerTest : StringSpec({
 
 		webTestClient.get()
 			.uri("/v2/lectures/me?page=0&size=20")
-			.withV2Headers()
+			.withAuthenticatedV2Headers()
 			.exchange()
 			.expectStatus().isOk
 			.expectBody()
@@ -144,7 +148,7 @@ class V2TypedPostQueryControllerTest : StringSpec({
 
 		webTestClient.get()
 			.uri("/v2/blogs/scheduled/me?page=0&size=20")
-			.withV2Headers()
+			.withAuthenticatedV2Headers()
 			.exchange()
 			.expectStatus().isOk
 			.expectBody()
@@ -166,7 +170,7 @@ class V2TypedPostQueryControllerTest : StringSpec({
 
 		webTestClient.get()
 			.uri("/v2/lectures/scheduled/me?page=0&size=20")
-			.withV2Headers()
+			.withAuthenticatedV2Headers()
 			.exchange()
 			.expectStatus().isOk
 			.expectBody()

@@ -133,9 +133,9 @@ class V2PostController(
 		@RequestParam(defaultValue = "20") @Min(1) @Max(100) size: Int,
 		@RequestParam(required = false) type: PostType?,
 	): ResponseEntity<AiV2ApiResponse<V2PagedPostResponse>> {
-		val requestContext = requestContextResolver.resolve(exchange)
+		val requestContext = requestContextResolver.resolveAuthenticated(exchange)
 		return ResponseEntity.ok(
-			AiV2ApiResponse.success(postService.listMyScheduledPosts(page, size, requestContext.requesterId, type).toV2()),
+			AiV2ApiResponse.success(postService.listMyScheduledPosts(page, size, requestContext.requireRequesterId(), type).toV2()),
 		)
 	}
 
