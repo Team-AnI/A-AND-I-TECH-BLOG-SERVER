@@ -438,6 +438,49 @@ class PostControllerTest : StringSpec({
 			.jsonPath("$.data.items[0].author.id").isEqualTo(requesterId)
 	}
 
+	"GET /v1/posts/scheduled/me should return my scheduled paged response" {
+		val requesterId = "u-me-scheduled-1"
+		val authorization = "Bearer scheduled-me-token"
+		val now = Instant.parse("2026-02-15T12:00:00Z")
+		val scheduledPublishAt = Instant.parse("2026-05-01T12:00:00Z")
+		coEvery { authTokenService.extractUserId(eq(authorization)) } returns requesterId
+		coEvery { service.listMyScheduledPosts(0, 20, requesterId, null) } returns
+			PagedPostResponse(
+				items = listOf(
+					PostResponse(
+						id = UUID.randomUUID(),
+						title = "my scheduled title",
+						contentMarkdown = "my scheduled content",
+						author = PostAuthorResponse(
+							id = requesterId,
+							nickname = "me",
+							profileImageUrl = null,
+						),
+						type = PostType.Blog,
+						status = PostStatus.Scheduled,
+						scheduledPublishAt = scheduledPublishAt,
+						createdAt = now,
+						updatedAt = now,
+					),
+				),
+				page = 0,
+				size = 20,
+				totalElements = 1,
+				totalPages = 1,
+			)
+
+		webTestClient.get()
+			.uri("/v1/posts/scheduled/me?page=0&size=20")
+			.header(HttpHeaders.AUTHORIZATION, authorization)
+			.exchange()
+			.expectStatus().isOk
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(true)
+			.jsonPath("$.data.totalElements").isEqualTo(1)
+			.jsonPath("$.data.items[0].status").isEqualTo("Scheduled")
+			.jsonPath("$.data.items[0].scheduledPublishAt").isEqualTo("2026-05-01T12:00:00Z")
+	}
+
 	"PATCH /v1/posts/{id} should return 200" {
 		val postId = UUID.randomUUID()
 		val authorId = "u-1005"

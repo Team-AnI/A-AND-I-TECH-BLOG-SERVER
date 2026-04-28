@@ -12,7 +12,9 @@ import com.aandiclub.tech.blog.presentation.post.dto.PatchPostRequest
 import com.aandiclub.tech.blog.presentation.post.dto.PostAuthorResponse
 import com.aandiclub.tech.blog.presentation.post.dto.PostResponse
 import com.aandiclub.tech.blog.presentation.post.service.PostService
+import io.swagger.v3.oas.annotations.Operation
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.mockk
 import org.springframework.http.MediaType
@@ -200,5 +202,55 @@ class V2PostControllerTest : StringSpec({
 			.expectBody()
 			.jsonPath("$.success").isEqualTo(true)
 			.jsonPath("$.data.collaborators[0].id").isEqualTo(collaboratorId)
+	}
+
+	"GET /v2/posts/scheduled/me should return wrapped scheduled response" {
+		val requesterId = "u-v2-scheduled"
+		val now = Instant.parse("2026-02-15T12:00:00Z")
+		coEvery { authTokenService.extractUserId(eq(authenticate)) } returns requesterId
+		coEvery { service.listMyScheduledPosts(0, 20, requesterId, null) } returns
+			PagedPostResponse(
+				items = listOf(
+					PostResponse(
+						id = UUID.randomUUID(),
+						title = "scheduled title",
+						contentMarkdown = "scheduled content",
+						author = PostAuthorResponse(
+							id = requesterId,
+							nickname = "neo",
+							profileImageUrl = null,
+						),
+						type = PostType.Blog,
+						status = PostStatus.Scheduled,
+						scheduledPublishAt = Instant.parse("2026-05-01T12:00:00Z"),
+						createdAt = now,
+						updatedAt = now,
+					),
+				),
+				page = 0,
+				size = 20,
+				totalElements = 1,
+				totalPages = 1,
+			)
+
+		webTestClient.get()
+			.uri("/v2/posts/scheduled/me?page=0&size=20")
+			.withAuthenticatedV2Headers()
+			.exchange()
+			.expectStatus().isOk
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(true)
+			.jsonPath("$.data.items[0].status").isEqualTo("Scheduled")
+			.jsonPath("$.data.items[0].scheduledPublishAt").isEqualTo("2026-05-01T12:00:00Z")
+	}
+
+	"legacy v2 /posts read endpoints should be marked deprecated" {
+		val methods = V2PostController::class.java.declaredMethods.associateBy { it.name }
+
+		listOf("get", "list", "listMyPosts", "listDrafts", "listMyDrafts", "listMyScheduledPosts").forEach { methodName ->
+			val method = methods.getValue(methodName)
+			method.isAnnotationPresent(Deprecated::class.java) shouldBe true
+			method.getAnnotation(Operation::class.java)?.deprecated shouldBe true
+		}
 	}
 })
