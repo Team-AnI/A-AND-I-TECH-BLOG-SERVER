@@ -19,4 +19,5 @@ data class PostResponse(
 	val publishedAt: Instant? = null,
 	val createdAt: Instant,
 	val updatedAt: Instant,
+	val share: PostShareResponse? = null,
 )

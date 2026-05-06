@@ -9,6 +9,7 @@ import com.aandiclub.tech.blog.domain.post.PostType
 import com.aandiclub.tech.blog.presentation.post.dto.PagedPostResponse
 import com.aandiclub.tech.blog.presentation.post.dto.PostAuthorResponse
 import com.aandiclub.tech.blog.presentation.post.dto.PostResponse
+import com.aandiclub.tech.blog.presentation.post.dto.PostShareResponse
 import com.aandiclub.tech.blog.presentation.post.service.PostService
 import io.kotest.core.spec.style.StringSpec
 import io.mockk.coEvery
@@ -52,6 +53,13 @@ class V2TypedPostQueryControllerTest : StringSpec({
 						status = PostStatus.Published,
 						createdAt = now,
 						updatedAt = now,
+						share = PostShareResponse(
+							shareUrl = "https://tech.aandiclub.com/share/articles/sample-blog-id",
+							clientUrl = "https://tech.aandiclub.com/articles/sample-blog-id",
+							title = "blog title",
+							description = "blog content",
+							imageUrl = "https://tech.aandiclub.com/images/default-og.png",
+						),
 					),
 				),
 				page = 0,
@@ -67,6 +75,7 @@ class V2TypedPostQueryControllerTest : StringSpec({
 			.expectBody()
 			.jsonPath("$.success").isEqualTo(true)
 			.jsonPath("$.data.items[0].type").isEqualTo("Blog")
+			.jsonPath("$.data.items[0].share.shareUrl").isEqualTo("https://tech.aandiclub.com/share/articles/sample-blog-id")
 	}
 
 	"GET /v2/lectures should require v2 auth headers" {

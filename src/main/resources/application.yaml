@@ -26,6 +26,14 @@ app:
     domain-code: 6
     service-version: ${APP_SERVICE_VERSION:0.0.1-SNAPSHOT}
     instance-id: ${HOSTNAME:${random.uuid}}
+  share:
+    public-base-url: ${APP_SHARE_PUBLIC_BASE_URL:http://localhost:8080}
+    default-og-image-url: ${APP_SHARE_DEFAULT_OG_IMAGE_URL:http://localhost:8080/og-default.png}
+    default-description: ${APP_SHARE_DEFAULT_DESCRIPTION:A&I 기술 블로그}
+    cache:
+      max-age-seconds: ${APP_SHARE_CACHE_MAX_AGE_SECONDS:60}
+      shared-max-age-seconds: ${APP_SHARE_CACHE_SHARED_MAX_AGE_SECONDS:300}
+      stale-while-revalidate-seconds: ${APP_SHARE_CACHE_STALE_WHILE_REVALIDATE_SECONDS:600}
   auth:
     jwt:
       issuer-uri: ${APP_AUTH_JWT_ISSUER_URI:}

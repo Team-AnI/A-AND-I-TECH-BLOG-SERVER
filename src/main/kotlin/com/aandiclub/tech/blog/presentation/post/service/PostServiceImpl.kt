@@ -15,6 +15,7 @@ import com.aandiclub.tech.blog.presentation.post.dto.PostAuthorResponse
 import com.aandiclub.tech.blog.presentation.post.dto.PagedPostResponse
 import com.aandiclub.tech.blog.presentation.post.dto.PatchPostRequest
 import com.aandiclub.tech.blog.presentation.post.dto.PostResponse
+import com.aandiclub.tech.blog.presentation.share.PostShareMetadataFactory
 import kotlinx.coroutines.reactor.awaitSingle
 import kotlinx.coroutines.flow.toList
 import org.springframework.data.domain.PageRequest
@@ -33,6 +34,7 @@ class PostServiceImpl(
 	private val postCollaboratorRepository: PostCollaboratorRepository,
 	private val userRepository: UserRepository,
 	private val entityOperations: R2dbcEntityOperations,
+	private val postShareMetadataFactory: PostShareMetadataFactory = PostShareMetadataFactory(),
 ) : PostService {
 
 	override suspend fun create(request: CreatePostRequest): PostResponse {
@@ -432,5 +434,6 @@ class PostServiceImpl(
 		publishedAt = publishedAt,
 		createdAt = createdAt,
 		updatedAt = updatedAt,
+		share = postShareMetadataFactory.create(this),
 	)
 }

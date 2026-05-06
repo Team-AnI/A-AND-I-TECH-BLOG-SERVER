@@ -9,6 +9,7 @@ import com.aandiclub.tech.blog.presentation.post.dto.PagedPostResponse
 import com.aandiclub.tech.blog.presentation.post.dto.PatchPostRequest
 import com.aandiclub.tech.blog.presentation.post.dto.PostAuthorResponse
 import com.aandiclub.tech.blog.presentation.post.dto.PostResponse
+import com.aandiclub.tech.blog.presentation.post.dto.PostShareResponse
 import com.aandiclub.tech.blog.presentation.post.service.PostService
 import io.kotest.core.spec.style.StringSpec
 import io.mockk.coEvery
@@ -229,6 +230,13 @@ class PostControllerTest : StringSpec({
 				status = PostStatus.Published,
 				createdAt = now,
 				updatedAt = now,
+				share = PostShareResponse(
+					shareUrl = "https://tech.aandiclub.com/share/articles/$postId",
+					clientUrl = "https://tech.aandiclub.com/articles/$postId",
+					title = "title",
+					description = "content summary",
+					imageUrl = "https://cdn.example.com/posts/thumbnail-detail.webp",
+				),
 			)
 
 		webTestClient.get()
@@ -240,6 +248,8 @@ class PostControllerTest : StringSpec({
 			.jsonPath("$.data.author.id").isEqualTo("u-2001")
 			.jsonPath("$.data.author.nickname").isEqualTo("상욱")
 			.jsonPath("$.data.author.profileImageUrl").isEqualTo("https://cdn.example.com/users/sangwook.webp")
+			.jsonPath("$.data.share.shareUrl").isEqualTo("https://tech.aandiclub.com/share/articles/$postId")
+			.jsonPath("$.data.share.clientUrl").isEqualTo("https://tech.aandiclub.com/articles/$postId")
 	}
 
 	"GET /v1/posts should return paged response" {
