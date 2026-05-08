@@ -64,6 +64,21 @@ docker compose up -d
 - Target instance must have `docker`, `docker compose`, and `aws cli`.
 - Current workflow uses GitHub OIDC + `AWS_ROLE_TO_ASSUME` to authenticate in GitHub Actions.
 
+## Dynamic OG share endpoint
+
+- Endpoint: `GET /share/articles/{postId}`
+- Purpose: returns server-rendered HTML with per-article Open Graph / Twitter meta tags for crawlers, then redirects users to `/articles/{postId}` via `meta refresh`
+- Only `Published` blog posts are exposed
+- Existing article detail APIs can also include a `share` object (`shareUrl`, `clientUrl`, `title`, `description`, `imageUrl`) for app/share-button usage
+- Recommended public routing:
+  - SPA: `/articles/**` -> Firebase Hosting / Flutter Web
+  - Share HTML: `/share/articles/**` -> this Spring server
+- Required env/config:
+  - `APP_SHARE_PUBLIC_BASE_URL`: public site base URL used for `og:url` and redirect URL
+  - `APP_SHARE_DEFAULT_OG_IMAGE_URL`: absolute fallback OG image URL
+  - `APP_SHARE_DEFAULT_DESCRIPTION`: fallback description
+  - cache tuning via `APP_SHARE_CACHE_*`
+
 ## A&I v2 API migration summary
 
 ### v1 / v2 coexistence

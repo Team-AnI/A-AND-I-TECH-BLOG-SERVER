@@ -19,4 +19,5 @@ data class V2PostResponse(
 	val publishedAt: Instant? = null,
 	val createdAt: Instant,
 	val updatedAt: Instant,
+	val share: V2PostShareResponse? = null,
 )
