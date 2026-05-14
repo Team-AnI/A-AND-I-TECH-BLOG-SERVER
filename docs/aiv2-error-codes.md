@@ -27,6 +27,7 @@
 
 | Code | Status | Service | Category | HTTP | Value | Severity |
 |---:|---|---|---|---:|---|---|
+| 90001 | deprecated | common | general | 400 | BAD_REQUEST | LOW |
 | 90101 | active | common | authentication | 401 | AUTHENTICATE_REQUIRED | LOW |
 | 90102 | active | common | authentication | 401 | AUTHENTICATE_INVALID | LOW |
 | 90301 | active | common | general | 400 | DEVICE_OS_REQUIRED | LOW |
@@ -59,6 +60,13 @@
 | 64804 | active | blog | internal system | 500 | POST_PUBLISH_FAILED | HIGH |
 | 64805 | active | blog | internal system | 500 | POST_UNPUBLISH_FAILED | HIGH |
 | 68801 | active | blog | internal system | 500 | BLOG_INTERNAL_SERVER_ERROR | CRITICAL |
+
+## Compatibility policy
+
+- `90001 BAD_REQUEST` is kept only for backward compatibility with already published clients/log parsers.
+- New generic validation or bad request fallback handling should prefer `93001 COMMON_VALIDATION_ERROR`.
+- Operational monitoring and Discord Bot aggregation should focus on the v2.0.1 Common monitoring codes: `93001`, `95001`, `90701`, and `98801`.
+- `90801 INTERNAL_SERVER_ERROR_DEPRECATED` is kept as deprecated. New Common internal server errors should use `98801 INTERNAL_SERVER_ERROR`.
 
 ## Confirm-needed items
 - whether all GET endpoints must require `Authenticate`
