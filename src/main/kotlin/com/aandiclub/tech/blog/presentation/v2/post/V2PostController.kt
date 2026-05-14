@@ -226,6 +226,9 @@ class V2PostController(
 		} catch (exception: AiV2ProtocolException) {
 			throw exception
 		} catch (exception: ResponseStatusException) {
+			if (exception.statusCode.is5xxServerError) {
+				throw AiV2ProtocolException(descriptor = descriptor, cause = exception)
+			}
 			throw exception
 		} catch (exception: IllegalArgumentException) {
 			throw exception

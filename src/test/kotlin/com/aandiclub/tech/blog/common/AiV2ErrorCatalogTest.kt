@@ -22,7 +22,9 @@ class AiV2ErrorCatalogTest : StringSpec({
 	"catalog should contain v2_0_1 common monitoring codes and deprecate legacy internal code" {
 		val codes = AiV2ErrorCatalog.all.map { it.code }
 
-		codes shouldContainAll listOf(93001, 95001, 90701, 98801, 90801)
+		codes shouldContainAll listOf(90001, 93001, 95001, 90701, 98801, 90801)
+		AiV2ErrorCatalog.badRequest.status shouldBe AiV2ErrorStatus.DEPRECATED
+		AiV2ErrorCatalog.commonValidationError.code shouldBe 93001
 		AiV2ErrorCatalog.deprecatedInternalServerError.status shouldBe AiV2ErrorStatus.DEPRECATED
 		AiV2ErrorCatalog.internalServerError.code shouldBe 98801
 	}
@@ -60,5 +62,12 @@ class AiV2ErrorCatalogTest : StringSpec({
 
 		descriptor.code shouldBe 68801
 		descriptor.service shouldBe AiV2ErrorService.BLOG
+	}
+
+	"v2 mapper should use common validation code for generic bad request fallback" {
+		val descriptor = AiV2ErrorMapper().map(ResponseStatusException(HttpStatus.BAD_REQUEST, "bad request"))
+
+		descriptor.code shouldBe 93001
+		descriptor.value shouldBe "COMMON_VALIDATION_ERROR"
 	}
 })

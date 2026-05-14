@@ -28,7 +28,7 @@ class AiV2ErrorMapper {
 			status == HttpStatus.SERVICE_UNAVAILABLE -> AiV2ErrorCatalog.externalSystemUnavailable
 			status == HttpStatus.INTERNAL_SERVER_ERROR -> AiV2ErrorCatalog.blogInternalServerError
 			status == HttpStatus.FORBIDDEN -> AiV2ErrorCatalog.forbidden
-			status == HttpStatus.BAD_REQUEST -> AiV2ErrorCatalog.badRequest
+			status == HttpStatus.BAD_REQUEST -> AiV2ErrorCatalog.commonValidationError
 			else -> AiV2ErrorCatalog.blogInternalServerError
 		}
 	}
