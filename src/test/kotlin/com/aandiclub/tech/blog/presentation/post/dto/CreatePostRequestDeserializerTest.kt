@@ -1,9 +1,11 @@
 package com.aandiclub.tech.blog.presentation.post.dto
 
+import com.aandiclub.tech.blog.domain.post.PostStatus
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import java.time.Instant
 
 class CreatePostRequestDeserializerTest : StringSpec({
 	"should deserialize legacy authorId string payload" {
@@ -68,5 +70,16 @@ class CreatePostRequestDeserializerTest : StringSpec({
 		)
 
 		request.type?.name shouldBe "Lecture"
+	}
+
+	"should infer scheduled status when scheduledPublishAt is present" {
+		val mapper = ObjectMapper().findAndRegisterModules()
+		val request = mapper.readValue(
+			"""{"title":"title","contentMarkdown":"content","author":{"id":"u-1001","nickname":"neo"},"scheduledPublishAt":"2026-05-01T12:00:00Z"}""",
+			CreatePostRequest::class.java,
+		)
+
+		request.status shouldBe PostStatus.Scheduled
+		request.scheduledPublishAt shouldBe Instant.parse("2026-05-01T12:00:00Z")
 	}
 })

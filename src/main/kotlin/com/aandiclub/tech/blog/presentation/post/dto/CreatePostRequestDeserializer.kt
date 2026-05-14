@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.DeserializationContext
 import com.fasterxml.jackson.databind.JsonDeserializer
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.exc.InvalidFormatException
+import java.time.Instant
 
 class CreatePostRequestDeserializer : JsonDeserializer<CreatePostRequest>() {
 	override fun deserialize(parser: JsonParser, ctxt: DeserializationContext): CreatePostRequest {
@@ -24,7 +25,8 @@ class CreatePostRequestDeserializer : JsonDeserializer<CreatePostRequest>() {
 			val contentMarkdown = node.path("contentMarkdown").asText("")
 			val thumbnailUrl = readText(node, "thumbnailUrl")
 			val type = readType(parser, node.path("type")) ?: PostType.Blog
-			val status = readStatus(parser, node.path("status")) ?: PostStatus.Published
+			val scheduledPublishAt = readInstant(parser, node.path("scheduledPublishAt"))
+			val status = readStatus(parser, node.path("status")) ?: if (scheduledPublishAt != null) PostStatus.Scheduled else PostStatus.Published
 			val author = parser.codec.treeToValue(authorNode, PostAuthorRequest::class.java)
 			val collaborators = readCollaborators(parser, node)
 
@@ -37,6 +39,7 @@ class CreatePostRequestDeserializer : JsonDeserializer<CreatePostRequest>() {
 				collaborators = collaborators,
 				type = type,
 				status = status,
+				scheduledPublishAt = scheduledPublishAt,
 			)
 		}
 
@@ -55,6 +58,15 @@ class CreatePostRequestDeserializer : JsonDeserializer<CreatePostRequest>() {
 			PostStatus.valueOf(node.asText())
 		} catch (_: IllegalArgumentException) {
 			throw InvalidFormatException(parser, "invalid post status", node, PostStatus::class.java)
+		}
+	}
+
+	private fun readInstant(parser: JsonParser, node: JsonNode): Instant? {
+		if (node.isMissingNode || node.isNull) return null
+		return try {
+			Instant.parse(node.asText())
+		} catch (_: RuntimeException) {
+			throw InvalidFormatException(parser, "invalid instant", node, Instant::class.java)
 		}
 	}
 

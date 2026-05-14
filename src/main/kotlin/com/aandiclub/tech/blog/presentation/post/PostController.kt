@@ -152,6 +152,27 @@ class PostController(
 		return ResponseEntity.ok(ApiResponse.success(postService.listMyDrafts(page, size, requesterId, type)))
 	}
 
+	@GetMapping("/scheduled/me")
+	@Operation(
+		summary = "List my scheduled posts (owner or collaborator)",
+		security = [SecurityRequirement(name = OpenApiConfiguration.BEARER_AUTH_SCHEME)],
+	)
+	@ApiResponses(
+		value = [
+			SwaggerApiResponse(responseCode = "200", description = "OK", content = [Content(schema = Schema(implementation = PagedPostResponse::class))]),
+			SwaggerApiResponse(responseCode = "401", description = "Unauthorized"),
+		],
+	)
+	suspend fun listMyScheduledPosts(
+		@RequestHeader(HttpHeaders.AUTHORIZATION, required = false) authorization: String?,
+		@RequestParam(defaultValue = "0") @Min(0) page: Int,
+		@RequestParam(defaultValue = "20") @Min(1) @Max(100) size: Int,
+		@RequestParam(required = false) type: PostType?,
+	): ResponseEntity<ApiResponse<PagedPostResponse>> {
+		val requesterId = authTokenService.extractUserId(authorization)
+		return ResponseEntity.ok(ApiResponse.success(postService.listMyScheduledPosts(page, size, requesterId, type)))
+	}
+
 	@PatchMapping("/{postId}", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
 	@Operation(
 		summary = "Patch post (multipart, optional thumbnail upload)",

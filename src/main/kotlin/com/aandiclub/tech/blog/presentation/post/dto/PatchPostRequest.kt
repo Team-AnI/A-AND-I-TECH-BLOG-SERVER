@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonAlias
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Size
+import java.time.Instant
 
 @JsonDeserialize(using = PatchPostRequestDeserializer::class)
 data class PatchPostRequest(
@@ -24,4 +25,5 @@ data class PatchPostRequest(
 	val collaborators: List<PostAuthorRequest>? = null,
 	val type: PostType? = null,
 	val status: PostStatus? = null,
+	val scheduledPublishAt: Instant? = null,
 )

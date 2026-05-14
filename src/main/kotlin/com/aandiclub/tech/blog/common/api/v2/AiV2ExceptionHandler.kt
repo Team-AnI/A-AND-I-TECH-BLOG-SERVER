@@ -3,6 +3,8 @@ package com.aandiclub.tech.blog.common.api.v2
 import com.aandiclub.tech.blog.common.error.ErrorMessageLocalizer
 import com.aandiclub.tech.blog.common.logging.ApiLogContext
 import com.aandiclub.tech.blog.presentation.v2.image.V2ImageController
+import com.aandiclub.tech.blog.presentation.v2.post.V2BlogQueryController
+import com.aandiclub.tech.blog.presentation.v2.post.V2LectureQueryController
 import com.aandiclub.tech.blog.presentation.v2.post.V2PostController
 import org.springframework.core.Ordered
 import org.springframework.core.annotation.Order
@@ -16,7 +18,14 @@ import org.springframework.web.server.ResponseStatusException
 import org.springframework.web.server.ServerWebExchange
 import org.springframework.web.server.ServerWebInputException
 
-@RestControllerAdvice(basePackageClasses = [V2PostController::class, V2ImageController::class])
+@RestControllerAdvice(
+	basePackageClasses = [
+		V2PostController::class,
+		V2BlogQueryController::class,
+		V2LectureQueryController::class,
+		V2ImageController::class,
+	],
+)
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class AiV2ExceptionHandler(
 	private val errorMapper: AiV2ErrorMapper,

@@ -9,6 +9,7 @@ import com.aandiclub.tech.blog.presentation.post.dto.PagedPostResponse
 import com.aandiclub.tech.blog.presentation.post.dto.PatchPostRequest
 import com.aandiclub.tech.blog.presentation.post.dto.PostAuthorResponse
 import com.aandiclub.tech.blog.presentation.post.dto.PostResponse
+import com.aandiclub.tech.blog.presentation.post.dto.PostShareResponse
 import com.aandiclub.tech.blog.presentation.post.service.PostService
 import io.kotest.core.spec.style.StringSpec
 import io.mockk.coEvery
@@ -229,6 +230,13 @@ class PostControllerTest : StringSpec({
 				status = PostStatus.Published,
 				createdAt = now,
 				updatedAt = now,
+				share = PostShareResponse(
+					shareUrl = "https://tech.aandiclub.com/share/articles/$postId",
+					clientUrl = "https://tech.aandiclub.com/articles/$postId",
+					title = "title",
+					description = "content summary",
+					imageUrl = "https://cdn.example.com/posts/thumbnail-detail.webp",
+				),
 			)
 
 		webTestClient.get()
@@ -240,6 +248,8 @@ class PostControllerTest : StringSpec({
 			.jsonPath("$.data.author.id").isEqualTo("u-2001")
 			.jsonPath("$.data.author.nickname").isEqualTo("상욱")
 			.jsonPath("$.data.author.profileImageUrl").isEqualTo("https://cdn.example.com/users/sangwook.webp")
+			.jsonPath("$.data.share.shareUrl").isEqualTo("https://tech.aandiclub.com/share/articles/$postId")
+			.jsonPath("$.data.share.clientUrl").isEqualTo("https://tech.aandiclub.com/articles/$postId")
 	}
 
 	"GET /v1/posts should return paged response" {
@@ -436,6 +446,49 @@ class PostControllerTest : StringSpec({
 			.jsonPath("$.data.items[0].type").isEqualTo("Blog")
 			.jsonPath("$.data.items[0].status").isEqualTo("Draft")
 			.jsonPath("$.data.items[0].author.id").isEqualTo(requesterId)
+	}
+
+	"GET /v1/posts/scheduled/me should return my scheduled paged response" {
+		val requesterId = "u-me-scheduled-1"
+		val authorization = "Bearer scheduled-me-token"
+		val now = Instant.parse("2026-02-15T12:00:00Z")
+		val scheduledPublishAt = Instant.parse("2026-05-01T12:00:00Z")
+		coEvery { authTokenService.extractUserId(eq(authorization)) } returns requesterId
+		coEvery { service.listMyScheduledPosts(0, 20, requesterId, null) } returns
+			PagedPostResponse(
+				items = listOf(
+					PostResponse(
+						id = UUID.randomUUID(),
+						title = "my scheduled title",
+						contentMarkdown = "my scheduled content",
+						author = PostAuthorResponse(
+							id = requesterId,
+							nickname = "me",
+							profileImageUrl = null,
+						),
+						type = PostType.Blog,
+						status = PostStatus.Scheduled,
+						scheduledPublishAt = scheduledPublishAt,
+						createdAt = now,
+						updatedAt = now,
+					),
+				),
+				page = 0,
+				size = 20,
+				totalElements = 1,
+				totalPages = 1,
+			)
+
+		webTestClient.get()
+			.uri("/v1/posts/scheduled/me?page=0&size=20")
+			.header(HttpHeaders.AUTHORIZATION, authorization)
+			.exchange()
+			.expectStatus().isOk
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(true)
+			.jsonPath("$.data.totalElements").isEqualTo(1)
+			.jsonPath("$.data.items[0].status").isEqualTo("Scheduled")
+			.jsonPath("$.data.items[0].scheduledPublishAt").isEqualTo("2026-05-01T12:00:00Z")
 	}
 
 	"PATCH /v1/posts/{id} should return 200" {

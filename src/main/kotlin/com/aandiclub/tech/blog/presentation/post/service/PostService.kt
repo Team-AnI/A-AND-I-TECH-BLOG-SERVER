@@ -16,6 +16,7 @@ interface PostService {
 	suspend fun listMyPosts(page: Int, size: Int, requesterId: String, status: PostStatus?, type: PostType?): PagedPostResponse
 	suspend fun listDrafts(page: Int, size: Int, type: PostType?): PagedPostResponse
 	suspend fun listMyDrafts(page: Int, size: Int, requesterId: String, type: PostType?): PagedPostResponse
+	suspend fun listMyScheduledPosts(page: Int, size: Int, requesterId: String, type: PostType?): PagedPostResponse
 	suspend fun patch(postId: UUID, requesterId: String, request: PatchPostRequest): PostResponse
 	suspend fun addCollaborator(postId: UUID, requesterId: String, request: AddCollaboratorRequest): PostResponse
 	suspend fun delete(postId: UUID)

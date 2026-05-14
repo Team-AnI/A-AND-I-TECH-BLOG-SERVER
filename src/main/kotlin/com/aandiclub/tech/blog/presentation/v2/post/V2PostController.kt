@@ -15,6 +15,7 @@ import com.aandiclub.tech.blog.presentation.v2.post.dto.V2PagedPostResponse
 import com.aandiclub.tech.blog.presentation.v2.post.dto.V2PostResponse
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.swagger.v3.oas.annotations.Operation
 import jakarta.validation.Valid
 import jakarta.validation.Validator
 import jakarta.validation.constraints.Max
@@ -68,6 +69,8 @@ class V2PostController(
 	}
 
 	@GetMapping("/{postId}")
+	@Deprecated("Use /v2/blogs/{postId} or /v2/lectures/{postId}")
+	@Operation(summary = "Get post detail", deprecated = true)
 	suspend fun get(
 		exchange: ServerWebExchange,
 		@PathVariable postId: UUID,
@@ -77,6 +80,8 @@ class V2PostController(
 	}
 
 	@GetMapping
+	@Deprecated("Use /v2/blogs or /v2/lectures")
+	@Operation(summary = "List posts", deprecated = true)
 	suspend fun list(
 		exchange: ServerWebExchange,
 		@RequestParam(defaultValue = "0") @Min(0) page: Int,
@@ -89,6 +94,8 @@ class V2PostController(
 	}
 
 	@GetMapping("/me")
+	@Deprecated("Use /v2/blogs/me or /v2/lectures/me")
+	@Operation(summary = "List my posts", deprecated = true)
 	suspend fun listMyPosts(
 		exchange: ServerWebExchange,
 		@RequestParam(defaultValue = "0") @Min(0) page: Int,
@@ -103,6 +110,8 @@ class V2PostController(
 	}
 
 	@GetMapping("/drafts")
+	@Deprecated("Use /v2/blogs/drafts or /v2/lectures/drafts")
+	@Operation(summary = "List draft posts", deprecated = true)
 	suspend fun listDrafts(
 		exchange: ServerWebExchange,
 		@RequestParam(defaultValue = "0") @Min(0) page: Int,
@@ -114,6 +123,8 @@ class V2PostController(
 	}
 
 	@GetMapping("/drafts/me")
+	@Deprecated("Use /v2/blogs/drafts/me or /v2/lectures/drafts/me")
+	@Operation(summary = "List my draft posts", deprecated = true)
 	suspend fun listMyDrafts(
 		exchange: ServerWebExchange,
 		@RequestParam(defaultValue = "0") @Min(0) page: Int,
@@ -123,6 +134,21 @@ class V2PostController(
 		val requestContext = requestContextResolver.resolveAuthenticated(exchange)
 		return ResponseEntity.ok(
 			AiV2ApiResponse.success(postService.listMyDrafts(page, size, requestContext.requireRequesterId(), type).toV2()),
+		)
+	}
+
+	@GetMapping("/scheduled/me")
+	@Deprecated("Use /v2/blogs/scheduled/me or /v2/lectures/scheduled/me")
+	@Operation(summary = "List my scheduled posts", deprecated = true)
+	suspend fun listMyScheduledPosts(
+		exchange: ServerWebExchange,
+		@RequestParam(defaultValue = "0") @Min(0) page: Int,
+		@RequestParam(defaultValue = "20") @Min(1) @Max(100) size: Int,
+		@RequestParam(required = false) type: PostType?,
+	): ResponseEntity<AiV2ApiResponse<V2PagedPostResponse>> {
+		val requestContext = requestContextResolver.resolveAuthenticated(exchange)
+		return ResponseEntity.ok(
+			AiV2ApiResponse.success(postService.listMyScheduledPosts(page, size, requestContext.requireRequesterId(), type).toV2()),
 		)
 	}
 
