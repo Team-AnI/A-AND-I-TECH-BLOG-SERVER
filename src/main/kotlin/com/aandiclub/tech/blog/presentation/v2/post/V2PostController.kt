@@ -1,7 +1,12 @@
 package com.aandiclub.tech.blog.presentation.v2.post
 
 import com.aandiclub.tech.blog.common.api.v2.AiV2ApiResponse
+import com.aandiclub.tech.blog.common.api.v2.AiV2ErrorCatalog
+import com.aandiclub.tech.blog.common.api.v2.AiV2ErrorDescriptor
+import com.aandiclub.tech.blog.common.api.v2.AiV2ProtocolException
 import com.aandiclub.tech.blog.common.api.v2.AiV2RequestContextResolver
+import com.aandiclub.tech.blog.common.logging.ApiLogContext
+import com.aandiclub.tech.blog.common.logging.BlogEventType
 import com.aandiclub.tech.blog.domain.post.PostStatus
 import com.aandiclub.tech.blog.domain.post.PostType
 import com.aandiclub.tech.blog.presentation.image.ImageUploadService
@@ -33,6 +38,7 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RequestPart
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.server.ServerWebExchange
+import org.springframework.web.server.ResponseStatusException
 import java.util.UUID
 
 @Validated
@@ -50,8 +56,11 @@ class V2PostController(
 		@RequestPart("thumbnail", required = false) thumbnail: FilePart?,
 	): ResponseEntity<AiV2ApiResponse<V2PostResponse>> {
 		requestContextResolver.resolveAuthenticated(exchange)
-		val uploadedThumbnailUrl = thumbnail?.let { imageUploadService.upload(it).url }
-		val created = postService.create(request.copy(thumbnailUrl = uploadedThumbnailUrl ?: request.thumbnailUrl))
+		val created = withBlogOperationFailure(AiV2ErrorCatalog.postCreateFailed) {
+			val uploadedThumbnailUrl = thumbnail?.let { imageUploadService.upload(it).url }
+			postService.create(request.copy(thumbnailUrl = uploadedThumbnailUrl ?: request.thumbnailUrl))
+		}
+		ApiLogContext.get(exchange)?.markEvent(BlogEventType.BLOG_POST_CREATED.name, created.id)
 		return ResponseEntity.status(HttpStatus.CREATED).body(AiV2ApiResponse.success(created.toV2()))
 	}
 
@@ -147,12 +156,16 @@ class V2PostController(
 		@RequestPart("thumbnail", required = false) thumbnail: FilePart?,
 	): ResponseEntity<AiV2ApiResponse<V2PostResponse>> {
 		val requestContext = requestContextResolver.resolveAuthenticated(exchange)
-		val uploadedThumbnailUrl = thumbnail?.let { imageUploadService.upload(it).url }
-		val patched = postService.patch(
-			postId,
-			requestContext.requireRequesterId(),
-			request.copy(thumbnailUrl = uploadedThumbnailUrl ?: request.thumbnailUrl),
-		)
+		val operation = resolvePatchOperation(request.status)
+		val patched = withBlogOperationFailure(operation.failureDescriptor) {
+			val uploadedThumbnailUrl = thumbnail?.let { imageUploadService.upload(it).url }
+			postService.patch(
+				postId,
+				requestContext.requireRequesterId(),
+				request.copy(thumbnailUrl = uploadedThumbnailUrl ?: request.thumbnailUrl),
+			)
+		}
+		ApiLogContext.get(exchange)?.markEvent(operation.eventType.name, patched.id)
 		return ResponseEntity.ok(AiV2ApiResponse.success(patched.toV2()))
 	}
 
@@ -163,9 +176,12 @@ class V2PostController(
 		@Valid @RequestBody request: PatchPostRequest,
 	): ResponseEntity<AiV2ApiResponse<V2PostResponse>> {
 		val requestContext = requestContextResolver.resolveAuthenticated(exchange)
-		return ResponseEntity.ok(
-			AiV2ApiResponse.success(postService.patch(postId, requestContext.requireRequesterId(), request).toV2()),
-		)
+		val operation = resolvePatchOperation(request.status)
+		val patched = withBlogOperationFailure(operation.failureDescriptor) {
+			postService.patch(postId, requestContext.requireRequesterId(), request)
+		}
+		ApiLogContext.get(exchange)?.markEvent(operation.eventType.name, patched.id)
+		return ResponseEntity.ok(AiV2ApiResponse.success(patched.toV2()))
 	}
 
 	@PostMapping("/{postId}/collaborators")
@@ -175,14 +191,17 @@ class V2PostController(
 		@Valid @RequestBody request: V2AddCollaboratorRequest,
 	): ResponseEntity<AiV2ApiResponse<V2PostResponse>> {
 		val requestContext = requestContextResolver.resolveAuthenticated(exchange)
-		val added = postService.addCollaborator(
-			postId,
-			requestContext.requireRequesterId(),
-			AddCollaboratorRequest(
-				ownerId = null,
-				collaborator = request.collaborator,
-			),
-		)
+		val added = withBlogOperationFailure(AiV2ErrorCatalog.postUpdateFailed) {
+			postService.addCollaborator(
+				postId,
+				requestContext.requireRequesterId(),
+				AddCollaboratorRequest(
+					ownerId = null,
+					collaborator = request.collaborator,
+				),
+			)
+		}
+		ApiLogContext.get(exchange)?.markEvent(BlogEventType.BLOG_POST_UPDATED.name, added.id)
 		return ResponseEntity.ok(AiV2ApiResponse.success(added.toV2()))
 	}
 
@@ -192,7 +211,41 @@ class V2PostController(
 		@PathVariable postId: UUID,
 	): ResponseEntity<AiV2ApiResponse<V2DeletePostResponse>> {
 		requestContextResolver.resolveAuthenticated(exchange)
-		postService.delete(postId)
+		withBlogOperationFailure(AiV2ErrorCatalog.postDeleteFailed) {
+			postService.delete(postId)
+		}
+		ApiLogContext.get(exchange)?.markEvent(BlogEventType.BLOG_POST_DELETED.name, postId)
 		return ResponseEntity.ok(AiV2ApiResponse.success(V2DeletePostResponse(deleted = true)))
 	}
+
+	private data class BlogPatchOperation(
+		val eventType: BlogEventType,
+		val failureDescriptor: AiV2ErrorDescriptor,
+	)
+
+	private fun resolvePatchOperation(status: PostStatus?): BlogPatchOperation =
+		when (status) {
+			PostStatus.Published -> BlogPatchOperation(BlogEventType.BLOG_POST_PUBLISHED, AiV2ErrorCatalog.postPublishFailed)
+			PostStatus.Draft -> BlogPatchOperation(BlogEventType.BLOG_POST_UNPUBLISHED, AiV2ErrorCatalog.postUnpublishFailed)
+			else -> BlogPatchOperation(BlogEventType.BLOG_POST_UPDATED, AiV2ErrorCatalog.postUpdateFailed)
+		}
+
+	private suspend fun <T> withBlogOperationFailure(
+		descriptor: AiV2ErrorDescriptor,
+		block: suspend () -> T,
+	): T =
+		try {
+			block()
+		} catch (exception: AiV2ProtocolException) {
+			throw exception
+		} catch (exception: ResponseStatusException) {
+			if (exception.statusCode.is5xxServerError) {
+				throw AiV2ProtocolException(descriptor = descriptor, cause = exception)
+			}
+			throw exception
+		} catch (exception: IllegalArgumentException) {
+			throw exception
+		} catch (exception: Exception) {
+			throw AiV2ProtocolException(descriptor = descriptor, cause = exception)
+		}
 }

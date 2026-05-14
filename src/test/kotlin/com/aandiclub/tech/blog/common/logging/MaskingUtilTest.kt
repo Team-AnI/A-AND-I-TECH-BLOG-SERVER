@@ -16,6 +16,10 @@ class MaskingUtilTest : StringSpec({
 			mapOf(
 				"loginId" to "hansw123",
 				"password" to "secret",
+				"passwordConfirm" to "secret",
+				"token" to "token",
+				"salt" to "salt",
+				"secret" to "secret",
 				"profile" to mapOf(
 					"accessToken" to "access-token",
 					"refreshToken" to "refresh-token",
@@ -25,6 +29,10 @@ class MaskingUtilTest : StringSpec({
 
 		masked["loginId"] shouldBe "han*****"
 		masked["password"] shouldBe "****"
+		masked["passwordConfirm"] shouldBe "****"
+		masked["token"] shouldBe "****"
+		masked["salt"] shouldBe "****"
+		masked["secret"] shouldBe "****"
 		(masked["profile"] as Map<*, *>)["accessToken"] shouldBe "****"
 		(masked["profile"] as Map<*, *>)["refreshToken"] shouldBe "****"
 	}

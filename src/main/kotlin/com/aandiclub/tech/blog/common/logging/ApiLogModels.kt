@@ -3,6 +3,26 @@ package com.aandiclub.tech.blog.common.logging
 import com.fasterxml.jackson.annotation.JsonProperty
 import java.time.Instant
 
+enum class ApiLogType {
+	API,
+	API_ERROR,
+	API_SLOW,
+	APP_ERROR,
+	EVENT,
+	EVENT_ERROR,
+	HEALTH,
+	SECURITY,
+	SYSTEM,
+}
+
+enum class BlogEventType {
+	BLOG_POST_CREATED,
+	BLOG_POST_UPDATED,
+	BLOG_POST_DELETED,
+	BLOG_POST_PUBLISHED,
+	BLOG_POST_UNPUBLISHED,
+}
+
 data class ApiLogEntry(
 	@JsonProperty("@timestamp")
 	val timestamp: Instant,
@@ -18,11 +38,13 @@ data class ApiLogEntry(
 	val actor: ApiLogActor,
 	val request: ApiLogRequest,
 	val response: ApiLogResponse,
+	val event: ApiLogEvent?,
 	val tags: List<String>,
 )
 
 data class ApiLogService(
 	val name: String,
+	val domain: String,
 	val domainCode: Int,
 	val version: String,
 	val instanceId: String,
@@ -44,6 +66,7 @@ data class ApiLogHttp(
 data class ApiLogHeaders(
 	val deviceOS: String?,
 	val Authenticate: String?,
+	val Authorization: String?,
 	val timestamp: String?,
 	val salt: String?,
 )
@@ -78,4 +101,9 @@ data class ApiLogResponseError(
 	val message: String?,
 	val value: String?,
 	val alert: String?,
+)
+
+data class ApiLogEvent(
+	val eventType: String,
+	val resourceId: Any?,
 )

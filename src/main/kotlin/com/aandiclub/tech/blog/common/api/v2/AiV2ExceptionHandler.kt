@@ -1,6 +1,5 @@
 package com.aandiclub.tech.blog.common.api.v2
 
-import com.aandiclub.tech.blog.common.error.ErrorMessageLocalizer
 import com.aandiclub.tech.blog.common.logging.ApiLogContext
 import com.aandiclub.tech.blog.presentation.v2.image.V2ImageController
 import com.aandiclub.tech.blog.presentation.v2.post.V2BlogQueryController
@@ -35,7 +34,7 @@ class AiV2ExceptionHandler(
 		buildErrorResponse(
 			exchange = exchange,
 			descriptor = exception.descriptor,
-			value = exception.value,
+			message = exception.message,
 		)
 
 	@ExceptionHandler(ResponseStatusException::class)
@@ -44,7 +43,7 @@ class AiV2ExceptionHandler(
 		return buildErrorResponse(
 			exchange = exchange,
 			descriptor = descriptor,
-			value = exception.reason ?: descriptor.message,
+			message = exception.reason ?: descriptor.message,
 		)
 	}
 
@@ -57,7 +56,7 @@ class AiV2ExceptionHandler(
 		return buildErrorResponse(
 			exchange = exchange,
 			descriptor = AiV2ErrorCatalog.validationFailed,
-			value = value,
+			message = value,
 		)
 	}
 
@@ -69,7 +68,7 @@ class AiV2ExceptionHandler(
 		buildErrorResponse(
 			exchange = exchange,
 			descriptor = AiV2ErrorCatalog.malformedBody,
-			value = exception.cause?.message ?: exception.reason ?: AiV2ErrorCatalog.malformedBody.message,
+			message = exception.reason ?: AiV2ErrorCatalog.malformedBody.message,
 		)
 
 	@ExceptionHandler(IllegalArgumentException::class)
@@ -80,24 +79,25 @@ class AiV2ExceptionHandler(
 		buildErrorResponse(
 			exchange = exchange,
 			descriptor = AiV2ErrorCatalog.validationFailed,
-			value = exception.message ?: AiV2ErrorCatalog.validationFailed.message,
+			message = exception.message ?: AiV2ErrorCatalog.validationFailed.message,
 		)
 
 	@ExceptionHandler(Exception::class)
 	fun handleUnhandledException(exception: Exception, exchange: ServerWebExchange): ResponseEntity<AiV2ApiResponse<Nothing>> =
 		buildErrorResponse(
 			exchange = exchange,
-			descriptor = AiV2ErrorCatalog.internalServerError,
-			value = exception.message ?: AiV2ErrorCatalog.internalServerError.message,
+			descriptor = AiV2ErrorCatalog.blogInternalServerError,
+			message = AiV2ErrorCatalog.blogInternalServerError.message,
 		)
 
 	private fun buildErrorResponse(
 		exchange: ServerWebExchange,
 		descriptor: AiV2ErrorDescriptor,
-		value: String,
+		message: String?,
 	): ResponseEntity<AiV2ApiResponse<Nothing>> {
+		val responseMessage = message?.takeIf { it.isNotBlank() } ?: descriptor.message
 		ApiLogContext.get(exchange)?.markFailure(
-			message = "HTTP request failed: ${descriptor.message}",
+			message = "HTTP request failed: $responseMessage",
 			statusCode = descriptor.httpStatus.value(),
 			errorCode = descriptor.code,
 		)
@@ -105,8 +105,8 @@ class AiV2ExceptionHandler(
 			AiV2ApiResponse.failure(
 				AiV2ApiError(
 					code = descriptor.code,
-					message = descriptor.message,
-					value = ErrorMessageLocalizer.localize(value),
+					message = responseMessage,
+					value = descriptor.value,
 					alert = descriptor.alert,
 				),
 			),
