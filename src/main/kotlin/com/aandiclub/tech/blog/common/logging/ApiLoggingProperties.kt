@@ -5,8 +5,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 @ConfigurationProperties(prefix = "app.api-log")
 data class ApiLoggingProperties(
 	val env: String = "local",
-	val serviceName: String = "blog",
+	val serviceName: String = "tech-blog-service",
+	val domain: String = "blog",
 	val domainCode: Int = 6,
 	val serviceVersion: String = "0.0.1-SNAPSHOT",
 	val instanceId: String = "unknown-instance",
+	val slowThresholdMs: Long = 1_000,
 )

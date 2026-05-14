@@ -13,14 +13,20 @@ import java.util.UUID
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class CorrelationIdFilter : WebFilter {
 	override fun filter(exchange: ServerWebExchange, chain: WebFilterChain): Mono<Void> {
-		val traceId = exchange.request.headers.getFirst(HEADER_NAME) ?: UUID.randomUUID().toString()
+		val traceId = exchange.request.headers.getFirst(TRACE_ID_HEADER)
+			?: exchange.request.headers.getFirst(ALT_TRACE_ID_HEADER)
+			?: exchange.request.headers.getFirst(HEADER_NAME)
+			?: UUID.randomUUID().toString()
 		exchange.attributes[ATTRIBUTE_NAME] = traceId
 		exchange.response.headers.set(HEADER_NAME, traceId)
+		exchange.response.headers.set(TRACE_ID_HEADER, traceId)
 		return chain.filter(exchange)
 	}
 
 	companion object {
 		const val HEADER_NAME = "X-Correlation-Id"
+		const val TRACE_ID_HEADER = "traceId"
+		const val ALT_TRACE_ID_HEADER = "X-Trace-Id"
 		const val ATTRIBUTE_NAME = "traceId"
 	}
 }

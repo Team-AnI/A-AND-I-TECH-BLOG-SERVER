@@ -13,6 +13,8 @@ class AiV2ErrorMapper {
 		return when {
 			status == HttpStatus.NOT_FOUND && reason.startsWith("post not found") -> AiV2ErrorCatalog.postNotFound
 			status == HttpStatus.BAD_REQUEST && reason == "draft posts are only available in draft list" -> AiV2ErrorCatalog.draftListOnly
+			status == HttpStatus.BAD_REQUEST && reason == "post cannot be edited" -> AiV2ErrorCatalog.postNotEditable
+			status == HttpStatus.FORBIDDEN && reason == "post is not published yet" -> AiV2ErrorCatalog.postNotPublished
 			status == HttpStatus.FORBIDDEN && reason == "only post owner or collaborator can edit" -> AiV2ErrorCatalog.postEditForbidden
 			status == HttpStatus.FORBIDDEN && reason == "only post owner can modify collaborators" -> AiV2ErrorCatalog.collaboratorEditForbidden
 			status == HttpStatus.FORBIDDEN && reason == "only post owner can add collaborators" -> AiV2ErrorCatalog.addCollaboratorForbidden
@@ -24,9 +26,10 @@ class AiV2ErrorMapper {
 			status == HttpStatus.UNAUTHORIZED -> AiV2ErrorCatalog.invalidAuthenticate
 			status == HttpStatus.BAD_GATEWAY -> AiV2ErrorCatalog.s3UploadFailed
 			status == HttpStatus.SERVICE_UNAVAILABLE -> AiV2ErrorCatalog.externalSystemUnavailable
+			status == HttpStatus.INTERNAL_SERVER_ERROR -> AiV2ErrorCatalog.blogInternalServerError
 			status == HttpStatus.FORBIDDEN -> AiV2ErrorCatalog.forbidden
 			status == HttpStatus.BAD_REQUEST -> AiV2ErrorCatalog.badRequest
-			else -> AiV2ErrorCatalog.internalServerError
+			else -> AiV2ErrorCatalog.blogInternalServerError
 		}
 	}
 }

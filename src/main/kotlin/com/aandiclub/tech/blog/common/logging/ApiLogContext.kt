@@ -16,6 +16,8 @@ data class ApiLogContext(
 	var authenticatedUserId: Any? = null,
 	var actorRole: String? = null,
 	var authenticated: Boolean = false,
+	var eventType: String? = null,
+	var eventResourceId: Any? = null,
 ) {
 	fun markAuthenticated(userId: String, role: String = "USER") {
 		authenticatedUserId = userId.toLongOrNull() ?: userId
@@ -27,6 +29,11 @@ data class ApiLogContext(
 		failureMessage = message
 		failureStatusCode = statusCode
 		this.errorCode = errorCode
+	}
+
+	fun markEvent(eventType: String, resourceId: Any?) {
+		this.eventType = eventType
+		this.eventResourceId = resourceId
 	}
 
 	companion object {

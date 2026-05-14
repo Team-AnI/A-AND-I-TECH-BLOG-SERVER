@@ -22,10 +22,12 @@ springdoc:
 app:
   api-log:
     env: ${APP_ENV:${spring.profiles.active:${spring.profiles.default:local}}}
-    service-name: blog
+    service-name: tech-blog-service
+    domain: blog
     domain-code: 6
     service-version: ${APP_SERVICE_VERSION:0.0.1-SNAPSHOT}
     instance-id: ${HOSTNAME:${random.uuid}}
+    slow-threshold-ms: ${APP_API_LOG_SLOW_THRESHOLD_MS:1000}
   auth:
     jwt:
       issuer-uri: ${APP_AUTH_JWT_ISSUER_URI:}
