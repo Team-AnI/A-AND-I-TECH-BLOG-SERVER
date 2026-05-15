@@ -32,3 +32,9 @@ jobs:
 
       - name: Run tests
         run: ./gradlew test --no-daemon
+
+      - name: Validate compose config
+        run: docker compose -f docker-compose.yml config
+
+      - name: Build Docker image
+        run: docker build -t blog-server:${{ github.sha }}-check .
