@@ -12,6 +12,9 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TESTCONTAINERS_DISABLED: "true"
 
     steps:
       - name: Checkout
