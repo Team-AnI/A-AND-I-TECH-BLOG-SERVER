@@ -1,20 +1,25 @@
 package com.aandiclub.tech.blog
 
-import io.kotest.core.spec.style.StringSpec
-import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.nulls.shouldNotBeNull
-import org.junit.jupiter.api.Assumptions.assumeTrue
+import io.r2dbc.spi.ConnectionFactory
+import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.ApplicationContext
 import org.springframework.core.env.Environment
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.r2dbc.core.DatabaseClient
 import org.springframework.test.context.ActiveProfiles
-import org.testcontainers.DockerClientFactory
+import org.springframework.test.context.junit.jupiter.EnabledIf
 
 @SpringBootTest
 @ActiveProfiles("test")
-class BootstrapConfigurationTest : StringSpec() {
+@EnabledIf(
+	expression = "#{T(org.testcontainers.DockerClientFactory).instance().isDockerAvailable()}",
+	loadContext = false,
+	reason = "Requires Docker daemon for Testcontainers-backed R2DBC",
+)
+class BootstrapConfigurationTest {
 
 	@Autowired
 	lateinit var applicationContext: ApplicationContext
@@ -22,20 +27,16 @@ class BootstrapConfigurationTest : StringSpec() {
 	@Autowired
 	lateinit var environment: Environment
 
-	override fun extensions() = listOf(SpringExtension)
+	@Test
+	fun `test profile should define r2dbc testcontainers url`() {
+		val url = environment.getProperty("spring.r2dbc.url")
+		url.shouldNotBeNull()
+		url.startsWith("r2dbc:tc:postgresql").shouldBeTrue()
+	}
 
-	init {
-		"test profile should define r2dbc testcontainers url" {
-			assumeTrue(runCatching { DockerClientFactory.instance().isDockerAvailable }.getOrDefault(false))
-			val url = environment.getProperty("spring.r2dbc.url")
-			url.shouldNotBeNull()
-			url.startsWith("r2dbc:tc:postgresql").shouldBeTrue()
-		}
-
-		"context should expose reactive database beans" {
-			assumeTrue(runCatching { DockerClientFactory.instance().isDockerAvailable }.getOrDefault(false))
-			applicationContext.containsBean("connectionFactory").shouldBeTrue()
-			applicationContext.containsBean("databaseClient").shouldBeTrue()
-		}
+	@Test
+	fun `context should expose reactive database beans`() {
+		applicationContext.getBean(ConnectionFactory::class.java).shouldNotBeNull()
+		applicationContext.getBean(DatabaseClient::class.java).shouldNotBeNull()
 	}
 }

@@ -15,6 +15,7 @@ import org.springframework.r2dbc.core.DatabaseClient
 import org.springframework.test.context.ActiveProfiles
 import org.springframework.test.context.junit.jupiter.EnabledIf
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 @SpringBootTest
@@ -44,7 +45,7 @@ class ScheduledPostPublisherIntegrationTest {
 	fun `publishDuePosts should publish only due scheduled posts and keep future ones scheduled`() = runBlocking {
 		val duePostId = UUID.randomUUID()
 		val futurePostId = UUID.randomUUID()
-		val now = Instant.now()
+		val now = Instant.now().truncatedTo(ChronoUnit.MICROS)
 		val dueScheduleAt = now.minusSeconds(60)
 		val futureScheduleAt = now.plusSeconds(3600)
 
