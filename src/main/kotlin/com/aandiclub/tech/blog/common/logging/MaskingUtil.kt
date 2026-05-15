@@ -28,7 +28,7 @@ class MaskingUtil {
 	}
 
 	private fun maskString(key: String?, value: String): String = when (key?.normalized()) {
-		"password", "passwordconfirm", "accesstoken", "refreshtoken", "token", "salt", "secret" -> "****"
+		"password", "passwordconfirm", "accesstoken", "refreshtoken", "token", "salt", "secret", "apikey", "cookie", "session" -> "****"
 		"loginid" -> maskLoginId(value)
 		"authenticate", "authorization" -> maskAuthenticateHeader(value) ?: "****"
 		else -> value
