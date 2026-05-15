@@ -191,6 +191,42 @@ jobs:
               return 1
             }
 
+            check_public_v2_api() {
+              local base_url
+              local path
+              local timestamp
+              local response
+
+              base_url="${HEALTHCHECK_URL%/health}"
+              if [[ "${base_url}" == "${HEALTHCHECK_URL}" ]]; then
+                base_url="http://127.0.0.1:8080"
+              fi
+
+              for path in "/v2/posts?page=0&size=1" "/v2/blogs?page=0&size=1"; do
+                for i in {1..30}; do
+                  timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+                  response="$(curl -fsS \
+                    -H "deviceOS: SERVER" \
+                    -H "timestamp: ${timestamp}" \
+                    "${base_url}${path}" 2>/dev/null || true)"
+
+                  if printf '%s' "${response}" | grep -Eq '"success"[[:space:]]*:[[:space:]]*true'; then
+                    echo "public v2 api smoke passed: ${path}"
+                    break
+                  fi
+
+                  if [[ "$i" -eq 30 ]]; then
+                    echo "public v2 api smoke failed: ${path}"
+                    return 1
+                  fi
+
+                  sleep 5
+                done
+              done
+
+              return 0
+            }
+
             verify_db_tables() {
               for i in {1..30}; do
                 if docker exec tech-blog-postgres psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -tAc "SELECT to_regclass('public.posts') IS NOT NULL AND to_regclass('public.users') IS NOT NULL;" | grep -q "t"; then
@@ -213,8 +249,8 @@ jobs:
                 return 1
               fi
 
-              if ! check_health; then
-                echo "Rollback healthcheck failed"
+              if ! check_public_v2_api; then
+                echo "Rollback public v2 api smoke failed"
                 docker logs --tail 200 "${APP_CONTAINER_NAME}" || true
                 return 1
               fi
@@ -230,7 +266,7 @@ jobs:
             docker compose -f "${COMPOSE_FILE}" pull "${APP_SERVICE_NAME}"
             docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans "${APP_SERVICE_NAME}"
 
-            if ! check_health || ! verify_db_tables; then
+            if ! check_health || ! verify_db_tables || ! check_public_v2_api; then
               rollback
               exit 1
             fi
