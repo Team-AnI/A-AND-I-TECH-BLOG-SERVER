@@ -37,6 +37,7 @@ class OpenApiDocumentationTest(
 		result.shouldContain("/v1/posts")
 		result.shouldContain("/v1/posts/{postId}")
 		result.shouldContain("/v1/posts/drafts/me")
+		result.shouldContain("/v1/posts/scheduled/me")
 		result.shouldContain("/v1/posts/images")
 		result.shouldContain("bearerAuth")
 	}
@@ -47,10 +48,19 @@ class OpenApiDocumentationTest(
 		result.shouldContain("/v2/posts")
 		result.shouldContain("/v2/posts/{postId}")
 		result.shouldContain("/v2/posts/drafts/me")
+		result.shouldContain("/v2/blogs/scheduled/me")
+		result.shouldContain("/v2/lectures/scheduled/me")
 		result.shouldContain("/v2/posts/images")
 		result.shouldContain("authenticateHeader")
 		result.shouldContain("deviceOS")
 		result.shouldContain("timestamp")
 		result.shouldContain("salt")
 	}
+
+	"swagger config endpoint should be available" {
+		val result = fetch("/v3/api-docs/swagger-config")
+		result.shouldContain("/v3/api-docs/v1")
+		result.shouldContain("/v3/api-docs/v2")
+	}
+
 })

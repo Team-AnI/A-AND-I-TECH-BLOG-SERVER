@@ -40,7 +40,10 @@ class AiV2RequestContextResolver(
 		val timestamp = try {
 			Instant.parse(timestampRaw)
 		} catch (_: DateTimeParseException) {
-			throw AiV2ProtocolException(AiV2ErrorCatalog.invalidTimestamp, value = timestampRaw)
+			throw AiV2ProtocolException(
+				descriptor = AiV2ErrorCatalog.invalidTimestamp,
+				messageOverride = "timestamp header is invalid: $timestampRaw",
+			)
 		}
 		val authenticate = headers.optionalHeader(AUTHENTICATE_HEADER)
 		val requesterId = when {
@@ -71,7 +74,7 @@ class AiV2RequestContextResolver(
 				} else {
 					AiV2ErrorCatalog.internalServerError
 				},
-				value = exception.reason ?: authenticate,
+				messageOverride = exception.reason ?: AiV2ErrorCatalog.invalidAuthenticate.message,
 				cause = exception,
 			)
 		}

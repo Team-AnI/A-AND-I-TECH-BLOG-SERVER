@@ -14,15 +14,19 @@ import com.aandiclub.tech.blog.presentation.post.dto.PostAuthorResponse
 import com.aandiclub.tech.blog.presentation.post.dto.PostResponse
 import com.aandiclub.tech.blog.presentation.post.service.PostService
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.swagger.v3.oas.annotations.Operation
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.mockk
 import jakarta.validation.Validation
 import org.springframework.core.io.ByteArrayResource
 import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.client.MultipartBodyBuilder
 import org.springframework.test.web.reactive.server.WebTestClient
+import org.springframework.web.server.ResponseStatusException
 import java.time.Instant
 import java.util.UUID
 
@@ -341,6 +345,83 @@ class V2PostControllerTest : StringSpec({
 			.jsonPath("$.data.type").isEqualTo("Lecture")
 	}
 
+	"PATCH /v2/posts/{id} should map service 5xx response status exception to post update failed" {
+		val postId = UUID.randomUUID()
+		val requesterId = "u-v2-patch-5xx"
+		coEvery { authTokenService.extractUserId(eq(authenticate)) } returns requesterId
+		coEvery { service.patch(eq(postId), eq(requesterId), any()) } throws
+			ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "db failed")
+
+		webTestClient.patch()
+			.uri("/v2/posts/$postId")
+			.withAuthenticatedV2Headers()
+			.contentType(MediaType.APPLICATION_JSON)
+			.bodyValue(PatchPostRequest(title = "updated"))
+			.exchange()
+			.expectStatus().is5xxServerError
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(false)
+			.jsonPath("$.error.code").isEqualTo(64802)
+			.jsonPath("$.error.value").isEqualTo("POST_UPDATE_FAILED")
+	}
+
+	"PATCH /v2/posts/{id} should map publish and unpublish 5xx failures to operation codes" {
+		val publishPostId = UUID.randomUUID()
+		val unpublishPostId = UUID.randomUUID()
+		val requesterId = "u-v2-publish-5xx"
+		coEvery { authTokenService.extractUserId(eq(authenticate)) } returns requesterId
+		coEvery {
+			service.patch(eq(publishPostId), eq(requesterId), match { it.status == PostStatus.Published })
+		} throws ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "publish failed")
+		coEvery {
+			service.patch(eq(unpublishPostId), eq(requesterId), match { it.status == PostStatus.Draft })
+		} throws ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "unpublish failed")
+
+		webTestClient.patch()
+			.uri("/v2/posts/$publishPostId")
+			.withAuthenticatedV2Headers()
+			.contentType(MediaType.APPLICATION_JSON)
+			.bodyValue(PatchPostRequest(status = PostStatus.Published))
+			.exchange()
+			.expectStatus().is5xxServerError
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(false)
+			.jsonPath("$.error.code").isEqualTo(64804)
+			.jsonPath("$.error.value").isEqualTo("POST_PUBLISH_FAILED")
+
+		webTestClient.patch()
+			.uri("/v2/posts/$unpublishPostId")
+			.withAuthenticatedV2Headers()
+			.contentType(MediaType.APPLICATION_JSON)
+			.bodyValue(PatchPostRequest(status = PostStatus.Draft))
+			.exchange()
+			.expectStatus().is5xxServerError
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(false)
+			.jsonPath("$.error.code").isEqualTo(64805)
+			.jsonPath("$.error.value").isEqualTo("POST_UNPUBLISH_FAILED")
+	}
+
+	"PATCH /v2/posts/{id} should keep 4xx response status exception mapping" {
+		val postId = UUID.randomUUID()
+		val requesterId = "u-v2-patch-4xx"
+		coEvery { authTokenService.extractUserId(eq(authenticate)) } returns requesterId
+		coEvery { service.patch(eq(postId), eq(requesterId), any()) } throws
+			ResponseStatusException(HttpStatus.FORBIDDEN, "only post owner or collaborator can edit")
+
+		webTestClient.patch()
+			.uri("/v2/posts/$postId")
+			.withAuthenticatedV2Headers()
+			.contentType(MediaType.APPLICATION_JSON)
+			.bodyValue(PatchPostRequest(title = "updated"))
+			.exchange()
+			.expectStatus().isForbidden
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(false)
+			.jsonPath("$.error.code").isEqualTo(60201)
+			.jsonPath("$.error.value").isEqualTo("POST_EDIT_FORBIDDEN")
+	}
+
 	"POST /v2/posts/{id}/collaborators should accept v2 request without ownerId" {
 		val postId = UUID.randomUUID()
 		val requesterId = "u-v2-owner"
@@ -389,5 +470,72 @@ class V2PostControllerTest : StringSpec({
 			.expectBody()
 			.jsonPath("$.success").isEqualTo(true)
 			.jsonPath("$.data.collaborators[0].id").isEqualTo(collaboratorId)
+	}
+
+	"GET /v2/posts/scheduled/me should return wrapped scheduled response" {
+		val requesterId = "u-v2-scheduled"
+		val now = Instant.parse("2026-02-15T12:00:00Z")
+		coEvery { authTokenService.extractUserId(eq(authenticate)) } returns requesterId
+		coEvery { service.listMyScheduledPosts(0, 20, requesterId, null) } returns
+			PagedPostResponse(
+				items = listOf(
+					PostResponse(
+						id = UUID.randomUUID(),
+						title = "scheduled title",
+						contentMarkdown = "scheduled content",
+						author = PostAuthorResponse(
+							id = requesterId,
+							nickname = "neo",
+							profileImageUrl = null,
+						),
+						type = PostType.Blog,
+						status = PostStatus.Scheduled,
+						scheduledPublishAt = Instant.parse("2026-05-01T12:00:00Z"),
+						createdAt = now,
+						updatedAt = now,
+					),
+				),
+				page = 0,
+				size = 20,
+				totalElements = 1,
+				totalPages = 1,
+			)
+
+		webTestClient.get()
+			.uri("/v2/posts/scheduled/me?page=0&size=20")
+			.withAuthenticatedV2Headers()
+			.exchange()
+			.expectStatus().isOk
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(true)
+			.jsonPath("$.data.items[0].status").isEqualTo("Scheduled")
+			.jsonPath("$.data.items[0].scheduledPublishAt").isEqualTo("2026-05-01T12:00:00Z")
+	}
+
+	"legacy v2 /posts read endpoints should be marked deprecated" {
+		val methods = V2PostController::class.java.declaredMethods.associateBy { it.name }
+
+		listOf("get", "list", "listMyPosts", "listDrafts", "listMyDrafts", "listMyScheduledPosts").forEach { methodName ->
+			val method = methods.getValue(methodName)
+			method.isAnnotationPresent(Deprecated::class.java) shouldBe true
+			method.getAnnotation(Operation::class.java)?.deprecated shouldBe true
+		}
+	}
+
+	"DELETE /v2/posts/{id} should map service 5xx response status exception to post delete failed" {
+		val postId = UUID.randomUUID()
+		val requesterId = "u-v2-delete-5xx"
+		coEvery { authTokenService.extractUserId(eq(authenticate)) } returns requesterId
+		coEvery { service.delete(eq(postId)) } throws ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "db failed")
+
+		webTestClient.delete()
+			.uri("/v2/posts/$postId")
+			.withAuthenticatedV2Headers()
+			.exchange()
+			.expectStatus().is5xxServerError
+			.expectBody()
+			.jsonPath("$.success").isEqualTo(false)
+			.jsonPath("$.error.code").isEqualTo(64803)
+			.jsonPath("$.error.value").isEqualTo("POST_DELETE_FAILED")
 	}
 })

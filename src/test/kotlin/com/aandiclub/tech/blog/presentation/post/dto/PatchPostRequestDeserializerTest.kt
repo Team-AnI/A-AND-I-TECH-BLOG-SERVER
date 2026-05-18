@@ -3,6 +3,7 @@ package com.aandiclub.tech.blog.presentation.post.dto
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
+import java.time.Instant
 
 class PatchPostRequestDeserializerTest : StringSpec({
 	"should deserialize collaborators payload" {
@@ -35,5 +36,15 @@ class PatchPostRequestDeserializerTest : StringSpec({
 		)
 
 		request.type?.name shouldBe "Lecture"
+	}
+
+	"should deserialize scheduledPublishAt when provided" {
+		val mapper = ObjectMapper().findAndRegisterModules()
+		val request = mapper.readValue(
+			"""{"status":"Scheduled","scheduledPublishAt":"2026-05-01T12:00:00Z"}""",
+			PatchPostRequest::class.java,
+		)
+
+		request.scheduledPublishAt shouldBe Instant.parse("2026-05-01T12:00:00Z")
 	}
 })

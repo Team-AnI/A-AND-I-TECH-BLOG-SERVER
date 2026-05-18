@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.DeserializationContext
 import com.fasterxml.jackson.databind.JsonDeserializer
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.exc.InvalidFormatException
+import java.time.Instant
 
 class PatchPostRequestDeserializer : JsonDeserializer<PatchPostRequest>() {
 	override fun deserialize(parser: JsonParser, ctxt: DeserializationContext): PatchPostRequest {
@@ -28,6 +29,7 @@ class PatchPostRequestDeserializer : JsonDeserializer<PatchPostRequest>() {
 				collaborators = readCollaborators(parser, node),
 				type = readType(parser, node.path("type")),
 				status = readStatus(parser, node.path("status")),
+				scheduledPublishAt = readInstant(parser, node.path("scheduledPublishAt")),
 			)
 		}
 
@@ -46,6 +48,15 @@ class PatchPostRequestDeserializer : JsonDeserializer<PatchPostRequest>() {
 			PostStatus.valueOf(node.asText())
 		} catch (_: IllegalArgumentException) {
 			throw InvalidFormatException(parser, "invalid post status", node, PostStatus::class.java)
+		}
+	}
+
+	private fun readInstant(parser: JsonParser, node: JsonNode): Instant? {
+		if (node.isMissingNode || node.isNull) return null
+		return try {
+			Instant.parse(node.asText())
+		} catch (_: RuntimeException) {
+			throw InvalidFormatException(parser, "invalid instant", node, Instant::class.java)
 		}
 	}
 

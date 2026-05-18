@@ -22,7 +22,22 @@ class CorrelationIdFilterTest : StringSpec({
 		filter.filter(exchange, WebFilterChain { Mono.empty() }).block()
 
 		exchange.response.headers.getFirst(CorrelationIdFilter.HEADER_NAME) shouldBe "trace-abc"
+		exchange.response.headers.getFirst(CorrelationIdFilter.TRACE_ID_HEADER) shouldBe "trace-abc"
 		exchange.getAttribute<String>(CorrelationIdFilter.ATTRIBUTE_NAME) shouldBe "trace-abc"
+	}
+
+	"should preserve provided traceId header" {
+		val exchange = MockServerWebExchange.from(
+			MockServerHttpRequest.get("/v2/posts")
+				.header(CorrelationIdFilter.TRACE_ID_HEADER, "trace-direct")
+				.build(),
+		)
+
+		filter.filter(exchange, WebFilterChain { Mono.empty() }).block()
+
+		exchange.response.headers.getFirst(CorrelationIdFilter.HEADER_NAME) shouldBe "trace-direct"
+		exchange.response.headers.getFirst(CorrelationIdFilter.TRACE_ID_HEADER) shouldBe "trace-direct"
+		exchange.getAttribute<String>(CorrelationIdFilter.ATTRIBUTE_NAME) shouldBe "trace-direct"
 	}
 
 	"should generate correlation id when request header is absent" {

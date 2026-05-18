@@ -38,7 +38,10 @@ class RequestResponseLoggingFilter(
 			return chain.filter(exchange)
 		}
 
-		val traceId = exchange.getAttribute<String>("traceId") ?: UUID.randomUUID().toString()
+		val traceId = exchange.getAttribute<String>("traceId")
+			?: exchange.request.headers.getFirst("traceId")?.trim()?.takeIf { it.isNotBlank() }
+			?: exchange.request.headers.getFirst("X-Trace-Id")?.trim()?.takeIf { it.isNotBlank() }
+			?: UUID.randomUUID().toString()
 		val requestId = exchange.request.headers.getFirst(ApiLogContext.REQUEST_ID_HEADER)
 			?.trim()
 			?.takeIf { it.isNotBlank() }
@@ -46,6 +49,7 @@ class RequestResponseLoggingFilter(
 		val context = ApiLogContext(traceId = traceId, requestId = requestId)
 		exchange.attributes[ApiLogContext.ATTRIBUTE_NAME] = context
 		exchange.response.headers.set(ApiLogContext.REQUEST_ID_HEADER, requestId)
+		exchange.response.headers.set("traceId", traceId)
 
 		return cacheRequestBody(exchange, context)
 			.flatMap { cachedExchange ->
@@ -54,7 +58,7 @@ class RequestResponseLoggingFilter(
 				chain.filter(mutatedExchange)
 					.doOnError { throwable ->
 						context.markFailure(
-							message = throwable.message ?: "HTTP request failed",
+							message = "HTTP request failed",
 							statusCode = 500,
 						)
 					}

@@ -15,6 +15,9 @@ data class V2PostResponse(
 	val collaborators: List<V2PostAuthorResponse> = emptyList(),
 	val type: PostType,
 	val status: PostStatus,
+	val scheduledPublishAt: Instant? = null,
+	val publishedAt: Instant? = null,
 	val createdAt: Instant,
 	val updatedAt: Instant,
+	val share: V2PostShareResponse? = null,
 )

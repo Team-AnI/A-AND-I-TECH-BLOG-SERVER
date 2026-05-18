@@ -36,7 +36,7 @@ class AiV2ErrorHandlingTest : StringSpec({
 			.jsonPath("$.success").isEqualTo(false)
 			.jsonPath("$.error.code").isEqualTo(90301)
 			.jsonPath("$.error.message").isEqualTo("deviceOS 헤더가 필요합니다.")
-			.jsonPath("$.error.value").isEqualTo("deviceOS 헤더가 필요합니다.")
+			.jsonPath("$.error.value").isEqualTo("DEVICE_OS_REQUIRED")
 			.jsonPath("$.error.alert").isEqualTo("앱 정보를 확인할 수 없어요. 앱을 다시 실행해 주세요.")
 			.jsonPath("$.timestamp").exists()
 	}
@@ -53,8 +53,8 @@ class AiV2ErrorHandlingTest : StringSpec({
 			.expectBody()
 			.jsonPath("$.success").isEqualTo(false)
 			.jsonPath("$.error.code").isEqualTo(60501)
-			.jsonPath("$.error.message").isEqualTo("게시글을 찾을 수 없습니다.")
-			.jsonPath("$.error.value").isEqualTo("게시글을 찾을 수 없습니다.")
+			.jsonPath("$.error.message").isEqualTo("post not found")
+			.jsonPath("$.error.value").isEqualTo("POST_NOT_FOUND")
 			.jsonPath("$.error.alert").isEqualTo("요청한 글을 찾을 수 없어요.")
 	}
 
@@ -68,8 +68,8 @@ class AiV2ErrorHandlingTest : StringSpec({
 			.expectBody()
 			.jsonPath("$.success").isEqualTo(false)
 			.jsonPath("$.error.code").isEqualTo(90303)
-			.jsonPath("$.error.value").isEqualTo("not-an-instant")
-			.jsonPath("$.error.message").isEqualTo("timestamp 헤더는 ISO-8601 형식이어야 합니다.")
+			.jsonPath("$.error.value").isEqualTo("TIMESTAMP_INVALID")
+			.jsonPath("$.error.message").isEqualTo("timestamp header is invalid: not-an-instant")
 			.jsonPath("$.error.alert").isEqualTo("요청 시간이 올바르지 않아요. 다시 시도해 주세요.")
 	}
 
@@ -84,6 +84,7 @@ class AiV2ErrorHandlingTest : StringSpec({
 			.jsonPath("$.success").isEqualTo(false)
 			.jsonPath("$.error.code").isEqualTo(90101)
 			.jsonPath("$.error.message").isEqualTo("Authenticate 헤더가 필요합니다.")
+			.jsonPath("$.error.value").isEqualTo("AUTHENTICATE_REQUIRED")
 			.jsonPath("$.error.alert").isEqualTo("로그인이 필요해요. 다시 로그인해 주세요.")
 	}
 })

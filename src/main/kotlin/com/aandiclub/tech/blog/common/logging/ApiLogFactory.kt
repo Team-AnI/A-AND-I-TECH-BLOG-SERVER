@@ -18,24 +18,26 @@ class ApiLogFactory(
 		val statusCode = context.failureStatusCode
 			?: exchange.response.statusCode?.value()
 			?: 200
-		val route = exchange.getAttribute<Any>(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE)
-			?.toString()
-			?: exchange.request.path.value()
+		val route = resolveRoute(exchange)
 		val response = buildResponse(context, statusCode)
+		val latencyMs = ((System.nanoTime() - context.startedAtNanos) / 1_000_000).coerceAtLeast(0)
 		val message = buildMessage(response, context)
 		val level = buildLevel(statusCode)
+		val logType = buildLogType(response, context, latencyMs)
+		val service = resolveService(response.error?.code)
 		val feature = resolveFeature(route)
 		val outcome = if (response.success) "success" else "fail"
 
 		return ApiLogEntry(
 			timestamp = Instant.now(),
 			level = level,
-			logType = if (response.success) "API" else "API_ERROR",
+			logType = logType.name,
 			message = message,
 			env = properties.env,
 			service = ApiLogService(
 				name = properties.serviceName,
-				domainCode = properties.domainCode,
+				domain = service.domain,
+				domainCode = service.domainCode,
 				version = properties.serviceVersion,
 				instanceId = properties.instanceId,
 			),
@@ -48,13 +50,14 @@ class ApiLogFactory(
 				path = exchange.request.path.value(),
 				route = route,
 				statusCode = statusCode,
-				latencyMs = ((System.nanoTime() - context.startedAtNanos) / 1_000_000).coerceAtLeast(0),
+				latencyMs = latencyMs,
 			),
 			headers = ApiLogHeaders(
 				deviceOS = exchange.request.headers.getFirst("deviceOS"),
 				Authenticate = maskingUtil.maskAuthenticateHeader(exchange.request.headers.getFirst("Authenticate")),
+				Authorization = maskingUtil.maskAuthenticateHeader(exchange.request.headers.getFirst(HttpHeaders.AUTHORIZATION)),
 				timestamp = exchange.request.headers.getFirst("timestamp"),
-				salt = exchange.request.headers.getFirst("salt"),
+				salt = exchange.request.headers.getFirst("salt")?.let { "****" },
 			),
 			client = ApiLogClient(
 				ip = resolveClientIp(exchange.request.headers, exchange),
@@ -68,11 +71,12 @@ class ApiLogFactory(
 				isAuthenticated = context.authenticated,
 			),
 			request = ApiLogRequest(
-				query = exchange.request.queryParams.toSingleValueMap().mapValues { (_, value) -> value },
+				query = maskMap(exchange.request.queryParams.toSingleValueMap().mapValues { (_, value) -> value }),
 				pathVariables = resolvePathVariables(exchange),
 				body = maskingUtil.maskBody(context.requestBody) ?: emptyMap<String, Any?>(),
 			),
 			response = response,
+			event = context.eventType?.let { ApiLogEvent(eventType = it, resourceId = context.eventResourceId) },
 			tags = listOf(
 				properties.serviceName,
 				feature,
@@ -108,7 +112,7 @@ class ApiLogFactory(
 				?: context.failureMessage
 				?: "request failed"
 			ApiLogResponseError(
-				code = errorMap?.get("code") ?: context.errorCode,
+				code = errorMap?.get("code") ?: context.errorCode ?: fallbackErrorCode(statusCode),
 				message = message,
 				value = errorMap?.get("value")?.toString() ?: message,
 				alert = errorMap?.get("alert")?.toString() ?: message,
@@ -131,6 +135,13 @@ class ApiLogFactory(
 			?: "HTTP request failed"
 	}
 
+	private fun buildLogType(response: ApiLogResponse, context: ApiLogContext, latencyMs: Long): ApiLogType = when {
+		!response.success -> ApiLogType.API_ERROR
+		context.eventType != null -> ApiLogType.EVENT
+		latencyMs >= properties.slowThresholdMs -> ApiLogType.API_SLOW
+		else -> ApiLogType.API
+	}
+
 	private fun buildLevel(statusCode: Int): String = when {
 		statusCode >= 500 -> "ERROR"
 		statusCode >= 400 -> "WARN"
@@ -146,6 +157,25 @@ class ApiLogFactory(
 	private fun resolvePathVariables(exchange: ServerWebExchange): Map<String, Any?> =
 		(exchange.getAttribute<Map<String, String>>(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE) ?: emptyMap())
 			.mapValues { (_, value) -> value }
+
+	@Suppress("UNCHECKED_CAST")
+	private fun maskMap(value: Map<String, Any?>): Map<String, Any?> =
+		maskingUtil.maskBody(value) as? Map<String, Any?> ?: value
+
+	private fun resolveRoute(exchange: ServerWebExchange): String =
+		exchange.getAttribute<Any>(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE)
+			?.toString()
+			?: normalizeRoute(exchange.request.path.value())
+
+	private fun normalizeRoute(path: String): String =
+		path.split("/")
+			.joinToString("/") { segment ->
+				when {
+					segment.matches(NUMERIC_SEGMENT) -> "{id}"
+					segment.matches(UUID_SEGMENT) -> "{id}"
+					else -> segment
+				}
+			}
 
 	private fun resolveFeature(route: String): String =
 		route.trim('/').split('/').drop(1).firstOrNull { it.isNotBlank() && !it.startsWith("{") } ?: "api"
@@ -176,4 +206,29 @@ class ApiLogFactory(
 			?.takeIf { it.isNotBlank() }
 			?: headers.getFirst("X-Real-IP")?.trim()?.takeIf { it.isNotBlank() }
 			?: exchange.request.remoteAddress?.address?.hostAddress
+
+	private fun resolveService(errorCode: Any?): LogServiceDomain {
+		val firstDigit = errorCode?.toString()?.firstOrNull { it.isDigit() }
+		return when (firstDigit) {
+			'6' -> LogServiceDomain(domain = "blog", domainCode = 6)
+			'9' -> LogServiceDomain(domain = "common", domainCode = 9)
+			else -> LogServiceDomain(domain = properties.domain, domainCode = properties.domainCode)
+		}
+	}
+
+	private fun fallbackErrorCode(statusCode: Int): Int? = when {
+		statusCode >= 500 -> 98801
+		statusCode == 404 -> 95001
+		else -> null
+	}
+
+	private data class LogServiceDomain(
+		val domain: String,
+		val domainCode: Int,
+	)
+
+	private companion object {
+		val NUMERIC_SEGMENT = Regex("\\d+")
+		val UUID_SEGMENT = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+	}
 }

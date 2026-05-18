@@ -27,12 +27,15 @@ class MaskingUtil {
 		else -> value
 	}
 
-	private fun maskString(key: String?, value: String): String = when (key?.lowercase()) {
-		"password", "accesstoken", "refreshtoken" -> "****"
+	private fun maskString(key: String?, value: String): String = when (key?.normalized()) {
+		"password", "passwordconfirm", "accesstoken", "refreshtoken", "token", "salt", "secret", "apikey", "cookie", "session" -> "****"
 		"loginid" -> maskLoginId(value)
 		"authenticate", "authorization" -> maskAuthenticateHeader(value) ?: "****"
 		else -> value
 	}
+
+	private fun String.normalized(): String =
+		lowercase().filter { it.isLetterOrDigit() }
 
 	private fun maskLoginId(value: String): String {
 		val trimmed = value.trim()
