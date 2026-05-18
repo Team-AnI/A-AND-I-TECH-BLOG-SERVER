@@ -23,6 +23,7 @@ jobs:
       POSTGRES_USER: ${{ vars.POSTGRES_USER || 'tech_blog' }}
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
       AUTH_JWT_SECRET: ${{ secrets.AUTH_JWT_SECRET }}
+      APP_AUTH_JWT_SHARED_SECRET: ${{ secrets.AUTH_JWT_SECRET }}
       APP_S3_BUCKET: ${{ secrets.APP_S3_BUCKET }}
       APP_S3_REGION: ${{ secrets.APP_S3_REGION }}
       APP_S3_PUBLIC_BASE_URL: ${{ secrets.APP_S3_PUBLIC_BASE_URL }}
@@ -111,6 +112,7 @@ jobs:
           POSTGRES_USER: ${{ env.POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
           AUTH_JWT_SECRET: ${{ env.AUTH_JWT_SECRET }}
+          APP_AUTH_JWT_SHARED_SECRET: ${{ env.APP_AUTH_JWT_SHARED_SECRET }}
           APP_S3_BUCKET: ${{ env.APP_S3_BUCKET }}
           APP_S3_REGION: ${{ env.APP_S3_REGION }}
           APP_S3_PUBLIC_BASE_URL: ${{ env.APP_S3_PUBLIC_BASE_URL }}
@@ -131,14 +133,26 @@ jobs:
           username: ${{ secrets.AWS_USER }}
           key: ${{ secrets.AWS_SSH_KEY }}
           port: ${{ vars.AWS_PORT || '22' }}
-          envs: AWS_REGION,IMAGE_URI,DEPLOY_TAG,APP_DIR,APP_CONTAINER_NAME,APP_SERVICE_NAME,HEALTHCHECK_URL,POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD,AUTH_JWT_SECRET,APP_S3_BUCKET,APP_S3_REGION,APP_S3_PUBLIC_BASE_URL,APP_USER_EVENTS_ENABLED,APP_USER_EVENTS_QUEUE_URL,APP_USER_EVENTS_REGION,APP_USER_EVENTS_WAIT_TIME_SECONDS,APP_USER_EVENTS_MAX_MESSAGES,APP_USER_EVENTS_POLL_DELAY_MS,APP_SHARE_PUBLIC_BASE_URL,APP_SHARE_DEFAULT_OG_IMAGE_URL,APP_SHARE_DEFAULT_DESCRIPTION,APP_SHARE_CACHE_MAX_AGE_SECONDS,APP_SHARE_CACHE_SHARED_MAX_AGE_SECONDS,APP_SHARE_CACHE_STALE_WHILE_REVALIDATE_SECONDS
+          envs: AWS_REGION,IMAGE_URI,DEPLOY_TAG,APP_DIR,APP_CONTAINER_NAME,APP_SERVICE_NAME,HEALTHCHECK_URL,POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD,AUTH_JWT_SECRET,APP_AUTH_JWT_SHARED_SECRET,APP_S3_BUCKET,APP_S3_REGION,APP_S3_PUBLIC_BASE_URL,APP_USER_EVENTS_ENABLED,APP_USER_EVENTS_QUEUE_URL,APP_USER_EVENTS_REGION,APP_USER_EVENTS_WAIT_TIME_SECONDS,APP_USER_EVENTS_MAX_MESSAGES,APP_USER_EVENTS_POLL_DELAY_MS,APP_SHARE_PUBLIC_BASE_URL,APP_SHARE_DEFAULT_OG_IMAGE_URL,APP_SHARE_DEFAULT_DESCRIPTION,APP_SHARE_CACHE_MAX_AGE_SECONDS,APP_SHARE_CACHE_SHARED_MAX_AGE_SECONDS,APP_SHARE_CACHE_STALE_WHILE_REVALIDATE_SECONDS
           script: |
             set -Eeuo pipefail
-            : "${AUTH_JWT_SECRET:?AUTH_JWT_SECRET is required}"
+            : "${APP_AUTH_JWT_SHARED_SECRET:?APP_AUTH_JWT_SHARED_SECRET is required}"
             : "${APP_S3_BUCKET:?APP_S3_BUCKET is required}"
             : "${APP_S3_REGION:?APP_S3_REGION is required}"
             if [[ "${APP_USER_EVENTS_ENABLED}" == "true" ]]; then
               : "${APP_USER_EVENTS_QUEUE_URL:?APP_USER_EVENTS_QUEUE_URL is required when APP_USER_EVENTS_ENABLED=true}"
+            fi
+
+            if [[ -n "${APP_AUTH_JWT_SHARED_SECRET:-}" ]]; then
+              echo "APP_AUTH_JWT_SHARED_SECRET is configured"
+            else
+              echo "APP_AUTH_JWT_SHARED_SECRET is missing"
+              exit 1
+            fi
+            if [[ -n "${AUTH_JWT_SECRET:-}" ]]; then
+              echo "AUTH_JWT_SECRET legacy alias is configured"
+            else
+              echo "AUTH_JWT_SECRET legacy alias is missing"
             fi
 
             command -v aws >/dev/null
@@ -171,7 +185,7 @@ jobs:
 
             export COMPOSE_PROJECT_NAME
             export IMAGE_URI="${NEW_IMAGE}"
-            export POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD AUTH_JWT_SECRET
+            export POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD AUTH_JWT_SECRET APP_AUTH_JWT_SHARED_SECRET
             export APP_S3_BUCKET APP_S3_REGION APP_S3_PUBLIC_BASE_URL
             export APP_USER_EVENTS_ENABLED APP_USER_EVENTS_QUEUE_URL APP_USER_EVENTS_REGION
             export APP_USER_EVENTS_WAIT_TIME_SECONDS APP_USER_EVENTS_MAX_MESSAGES APP_USER_EVENTS_POLL_DELAY_MS
@@ -191,37 +205,66 @@ jobs:
               return 1
             }
 
-            check_public_v2_api() {
+            public_v2_base_url() {
               local base_url
-              local path
-              local timestamp
-              local response
 
               base_url="${HEALTHCHECK_URL%/health}"
               if [[ "${base_url}" == "${HEALTHCHECK_URL}" ]]; then
                 base_url="http://127.0.0.1:8080"
               fi
+              printf '%s' "${base_url}"
+            }
 
-              for path in "/v2/posts?page=0&size=1" "/v2/blogs?page=0&size=1"; do
-                for i in {1..30}; do
-                  timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            check_public_v2_api_request() {
+              local base_url
+              local path
+              local label
+              local authenticate_header
+              local timestamp
+              local response
+
+              path="$1"
+              label="$2"
+              authenticate_header="${3:-}"
+              base_url="$(public_v2_base_url)"
+
+              for i in {1..30}; do
+                timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+                if [[ -n "${authenticate_header}" ]]; then
+                  response="$(curl -fsS \
+                    -H "deviceOS: SERVER" \
+                    -H "timestamp: ${timestamp}" \
+                    -H "Authenticate: ${authenticate_header}" \
+                    "${base_url}${path}" 2>/dev/null || true)"
+                else
                   response="$(curl -fsS \
                     -H "deviceOS: SERVER" \
                     -H "timestamp: ${timestamp}" \
                     "${base_url}${path}" 2>/dev/null || true)"
+                fi
 
-                  if printf '%s' "${response}" | grep -Eq '"success"[[:space:]]*:[[:space:]]*true'; then
-                    echo "public v2 api smoke passed: ${path}"
-                    break
-                  fi
+                if printf '%s' "${response}" | grep -Eq '"success"[[:space:]]*:[[:space:]]*true'; then
+                  echo "public v2 api smoke passed: ${label} ${path}"
+                  return 0
+                fi
 
-                  if [[ "$i" -eq 30 ]]; then
-                    echo "public v2 api smoke failed: ${path}"
-                    return 1
-                  fi
+                sleep 5
+              done
 
-                  sleep 5
-                done
+              echo "public v2 api smoke failed: ${label} ${path}"
+              return 1
+            }
+
+            check_public_v2_api() {
+              local path
+
+              for path in "/v2/posts?page=0&size=1" "/v2/blogs?page=0&size=1"; do
+                if ! check_public_v2_api_request "${path}" "without optional auth"; then
+                  return 1
+                fi
+                if ! check_public_v2_api_request "${path}" "with invalid optional auth" "Bearer broken-token-for-public-smoke"; then
+                  return 1
+                fi
               done
 
               return 0

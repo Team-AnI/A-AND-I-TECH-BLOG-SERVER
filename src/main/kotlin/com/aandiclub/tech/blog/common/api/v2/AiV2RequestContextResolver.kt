@@ -49,7 +49,8 @@ class AiV2RequestContextResolver(
 		val requesterId = when {
 			authenticate == null && authenticationRequired -> throw AiV2ProtocolException(AiV2ErrorCatalog.missingAuthenticate)
 			authenticate == null -> null
-			else -> extractRequesterId(authenticate)
+			authenticationRequired -> extractRequesterId(authenticate)
+			else -> extractOptionalRequesterId(authenticate)
 		}
 
 		return AiV2RequestContext(
@@ -77,6 +78,13 @@ class AiV2RequestContextResolver(
 				messageOverride = exception.reason ?: AiV2ErrorCatalog.invalidAuthenticate.message,
 				cause = exception,
 			)
+		}
+
+	private suspend fun extractOptionalRequesterId(authenticate: String): String? =
+		try {
+			extractRequesterId(authenticate)
+		} catch (_: AiV2ProtocolException) {
+			null
 		}
 
 	private fun HttpHeaders.requiredHeader(name: String, descriptor: AiV2ErrorDescriptor): String =
